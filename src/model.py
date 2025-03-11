@@ -47,3 +47,13 @@ class Environment(Model):
             if isinstance(agent, Zone):
                 return agent
         return None
+
+    def remove_agent(self, agent):
+        self.grid.remove_agent(agent)
+        self.schedule.remove(agent)
+        self.num_agents -= 1
+
+    def add_agent(self, agent, pos):
+        self.grid.place_agent(agent, pos)
+        self.num_agents += 1
+        self.schedule.add(agent)
