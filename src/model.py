@@ -35,7 +35,7 @@ class Environment(Model):
         # Initialize agents randomly
         for _ in range(self.num_agents):
             x, y = self.random.randrange(width), self.random.randrange(height)
-            a = Drone(self)
+            a = Drone(self, (x, y))
             self.grid.place_agent(a, (x, y))
 
     def step(self):
