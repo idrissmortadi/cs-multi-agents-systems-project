@@ -29,6 +29,7 @@ def agent_portrayal(agent: mesa.Agent):
             "marker": "s",
             "color": COLORS_MAP[agent.zone_type],
             "zorder": 99,
+            "size": 1300,
         }
     return portrayal
 
