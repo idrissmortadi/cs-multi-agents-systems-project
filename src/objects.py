@@ -12,6 +12,7 @@ COLORS_MAP = {
 class Waste(Agent):
     def __init__(self, model, waste_color: Literal["G", "Y", "R"]):
         super().__init__(model)
+        self.weight = 1
         self.waste_color = waste_color
 
     def step_agent(self):

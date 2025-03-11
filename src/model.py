@@ -35,7 +35,8 @@ class Environment(Model):
         # Initialize agents randomly
         for _ in range(self.num_agents):
             x, y = self.random.randrange(width), self.random.randrange(height)
-            a = Drone(self, (x, y))
+            zone_type = self._get_zone((x, y)).zone_type
+            a = Drone(self, zone_type)
             self.grid.place_agent(a, (x, y))
 
     def step(self):
@@ -57,3 +58,47 @@ class Environment(Model):
         self.grid.place_agent(agent, pos)
         self.num_agents += 1
         self.schedule.add(agent)
+
+    @staticmethod
+    def do(drone: Drone, action: str) -> dict:
+        getattr(drone, action)()
+
+        neighbors = drone.model.grid.get_neighborhood(
+            drone.pos, moore=False, include_center=False
+        )
+        neighbor_zones = [
+            a
+            for a in drone.model.grid.get_cell_list_contents(neighbors)
+            if isinstance(a, Zone)
+        ]
+        neighbor_drones = [
+            a
+            for a in drone.model.grid.get_cell_list_contents(neighbors)
+            if isinstance(a, Drone)
+        ]
+        neighbor_wastes = [
+            a
+            for a in drone.model.grid.get_cell_list_contents(neighbors)
+            if isinstance(a, Waste)
+        ]
+
+        # Get the drone's current zone type
+        drone_zone_type = drone.knowledge["zone_type"]
+
+        # Filter neighbors - only include cells that have the same zone type
+        valid_neighbors = []
+        for pos in neighbors:
+            zone_agent = neighbor_zones[neighbors.index(pos)]
+            if zone_agent and zone_agent.zone_type == drone_zone_type:
+                valid_neighbors.append(pos)
+
+        # Calculate empty neighbors from the filtered list
+        neighbors_empty = set(valid_neighbors) - set([a.pos for a in neighbor_drones])
+
+        percepts = {
+            "neighbors_empty": list(neighbors_empty),
+            "neighbor_zones": [(a.zone_type, a.pos) for a in neighbor_zones],
+            "neighbor_drones": [(a.unique_id, a.pos) for a in neighbor_drones],
+            "neighbor_wastes": [(a.unique_id, a.pos) for a in neighbor_wastes],
+        }
+        return percepts
