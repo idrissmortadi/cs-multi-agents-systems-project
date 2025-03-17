@@ -6,7 +6,7 @@ from objects import Waste, Zone
 
 
 class Environment(Model):
-    def __init__(self, n=1, num_wastes=10, width=10, height=10, seed=None):
+    def __init__(self, n=1, num_wastes=10, width=9, height=9, seed=None):
         super().__init__(seed=seed)
 
         self.num_agents = n
@@ -50,13 +50,13 @@ class Environment(Model):
 
     def remove_agent(self, agent):
         self.grid.remove_agent(agent)
-        self.schedule.remove(agent)
+        # self.schedule.remove(agent)
         self.num_agents -= 1
 
     def add_agent(self, agent, pos):
         self.grid.place_agent(agent, pos)
         self.num_agents += 1
-        self.schedule.add(agent)
+        # self.schedule.add(agent)
 
     def get_agent_by_id(self, agent_id):
         """Retrieve an agent by its unique ID"""

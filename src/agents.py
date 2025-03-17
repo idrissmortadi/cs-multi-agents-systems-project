@@ -41,10 +41,7 @@ class Drone(Agent):
         self.knowledge["actions"].append(f"moved to {new_position}")
 
         # Update knowledge about whether position is in drop zone
-        is_drop_zone = (
-            new_position[0] % (self.knowledge["grid_width"] // 3) == 0
-            and new_position[0] != 0
-        )
+        is_drop_zone = new_position[0] == (self.knowledge["zone_type"] * 3 + 2)
         self.knowledge["in_drop_zone"] = is_drop_zone
 
     def pick_waste(self):
@@ -59,7 +56,7 @@ class Drone(Agent):
             if (
                 waste.waste_color == self.knowledge["carried_waste_type"]
                 or self.knowledge["carried_waste_type"] is None
-            ) and waste.waste_color <= self.knowledge["zone_type"]:
+            ) and waste.waste_color == self.knowledge["zone_type"]:
                 self.knowledge["carried_waste_amount"] += waste.weight
                 self.knowledge["carried_waste_type"] = waste.waste_color
                 self.model.grid.remove_agent(waste)
@@ -87,9 +84,7 @@ class Drone(Agent):
 
         # Update drop zone status based on current position
 
-        is_drop_zone = (
-            self.pos[0] % (self.knowledge["grid_width"] // 3) == 0 and self.pos[0] != 0
-        )
+        is_drop_zone = self.pos[0] == (self.knowledge["zone_type"] * 3 + 2)
         self.knowledge["in_drop_zone"] = is_drop_zone
 
     def transform_waste(self):
@@ -105,11 +100,13 @@ class Drone(Agent):
         if self.knowledge["carried_waste_amount"] == 2:
             print("Transforming waste")
             return "transform_waste"
+        print(self.knowledge["in_drop_zone"], self)
         # First priority: Drop waste if in drop zone and carrying waste
         if (
             self.knowledge["in_drop_zone"]
             and self.knowledge["carried_waste_amount"] > 0
         ):
+            print("Reached drop zone")
             if self.knowledge["carried_waste_type"] == (
                 self.knowledge["zone_type"] + 1
             ):
@@ -123,7 +120,7 @@ class Drone(Agent):
             if (
                 waste.waste_color == self.knowledge["carried_waste_type"]
                 or self.knowledge["carried_waste_type"] is None
-            ) and waste.waste_color <= self.knowledge["zone_type"]:
+            ) and waste.waste_color == self.knowledge["zone_type"]:
                 filtered_wastes.append(waste_id)
         if filtered_wastes and self.knowledge["carried_waste_amount"] < 2:
             return "pick_waste"

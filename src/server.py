@@ -13,9 +13,15 @@ print(f"Mesa version: {mesa.__version__}")
 
 def agent_portrayal(agent: mesa.Agent):
     if isinstance(agent, Waste):
+        markers = {
+            0: "D",  # Diamond
+            1: "o",  # Circle
+            2: "s",
+        }  # Square
+
         portrayal = {
             "color": "black",
-            "marker": "D",
+            "marker": markers.get(agent.waste_color, "D"),
             "zorder": 100,
             "size": 70,
         }
@@ -51,10 +57,10 @@ model_params = {
         "max": 100,
         "step": 1,
     },
-    "width": 10,
-    "height": 10,
+    "width": 9,
+    "height": 9,
 }
-money_model = Environment(n=10, num_wastes=10, width=10, height=10)
+money_model = Environment(n=1, num_wastes=2, width=9, height=9)
 
 SpaceGraph = make_space_component(agent_portrayal)
 # GiniEthnicityPlot = make_plot_component(["Gini_Mixed", "Gini_Green", "Gini_Blue"])
