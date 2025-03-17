@@ -14,13 +14,12 @@ class Environment(Model):
 
         # No torus, agents cannot move off the grid
         self.grid = MultiGrid(width, height, torus=False)
+        self.zone_mapping = {"G": 0, "Y": 1, "R": 2}
 
         # Initialize zones
         for x in range(width):
             for y in range(height):
-                zone_color = (
-                    "G" if x < width // 3 else "Y" if x < 2 * width // 3 else "R"
-                )
+                zone_color = 0 if x < width // 3 else 1 if x < 2 * width // 3 else 2
                 a = Zone(self, zone_color)
                 self.grid.place_agent(a, (x, y))
 
@@ -93,7 +92,7 @@ class Environment(Model):
         valid_neighbors = []
         for pos in neighbors:
             zone_agent = neighbor_zones[neighbors.index(pos)]
-            if zone_agent and zone_agent.zone_type == drone_zone_type:
+            if zone_agent and zone_agent.zone_type <= drone_zone_type:
                 valid_neighbors.append(pos)
 
         # Calculate empty neighbors from the filtered list

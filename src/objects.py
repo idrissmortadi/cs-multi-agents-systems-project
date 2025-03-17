@@ -3,14 +3,14 @@ from typing import Literal
 from mesa import Agent
 
 COLORS_MAP = {
-    "G": "green",
-    "Y": "yellow",
-    "R": "red",
+    0: "green",
+    1: "yellow",
+    2: "red",
 }
 
 
 class Waste(Agent):
-    def __init__(self, model, waste_color: Literal["G", "Y", "R"]):
+    def __init__(self, model, waste_color: Literal[0, 1, 2]):
         super().__init__(model)
         self.weight = 1
         self.waste_color = waste_color
@@ -20,7 +20,7 @@ class Waste(Agent):
 
 
 class Zone(Agent):
-    def __init__(self, model, zone_type: Literal["G", "Y", "R"]):
+    def __init__(self, model, zone_type: Literal[0, 1, 2]):
         super().__init__(model)
         self.zone_type = zone_type
 
