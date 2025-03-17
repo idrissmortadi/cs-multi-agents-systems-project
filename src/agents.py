@@ -6,8 +6,6 @@ from mesa import Agent
 class Drone(Agent):
     def __init__(self, model, zone_type):
         super().__init__(model)
-        self.max_weight = 2
-        self.carrying_waste = 0  # Track how much waste the drone is carrying
         self.percepts = {
             "neighbors_empty": [],  # [(x, y), ...] in correponding zone color
             "neighbor_zones": [],  # [(zone_type, zone_pos), ...]
@@ -15,12 +13,13 @@ class Drone(Agent):
             "neighbor_wastes": [],  # [(waste_id, waste_pos), ...]
         }
         self.knowledge = {
+            "carried_waste_type": None,
+            "carried_waste_amount": 0,
             "actions": [],
             "percepts": [],
             "grid_width": self.model.grid.width,
             "grid_height": self.model.grid.height,
             "zone_type": zone_type,
-            "carrying_waste": 0,  # Track amount of waste being carried
             "in_drop_zone": False,  # Whether drone is in a drop zone
         }
 
@@ -55,12 +54,11 @@ class Drone(Agent):
             if waste_pos == self.pos
         ]
 
-        if wastes_at_position and self.max_weight > 0:
+        if wastes_at_position and self.knowledge["carried_waste_amount"] < 2:
             waste_id, _ = wastes_at_position[0]  # Get the first waste
             waste = self.model.get_agent_by_id(waste_id)
-            if waste and self.max_weight >= waste.weight:
-                self.max_weight -= waste.weight
-                self.knowledge["carrying_waste"] += waste.weight
+            if waste:
+                self.knowledge["carried_waste_amount"] += waste.weight
                 self.model.grid.remove_agent(waste)
                 self.knowledge["actions"].append(f"picked waste {waste_id}")
                 print(f"Drone {self.unique_id} picked waste {waste.unique_id}")
@@ -69,9 +67,9 @@ class Drone(Agent):
 
     def drop_waste(self):
         # Only execute if carrying waste
-        if self.knowledge["carrying_waste"] > 0:
+        if self.knowledge["carried_waste_amount"] > 0:
             self.max_weight = 2  # Reset to full capacity
-            self.knowledge["carrying_waste"] = 0
+            self.knowledge["carried_waste_amount"] = 0
             self.knowledge["actions"].append("dropped waste")
             print(f"Drone {self.unique_id} dropped all waste")
             return True
@@ -87,14 +85,25 @@ class Drone(Agent):
         )
         self.knowledge["in_drop_zone"] = is_drop_zone
 
+    def transform_waste(self):
+        self.knowledge["carried_waste_amount"] = 1
+        self.knowledge["carried_waste_type"] = self.knowledge["zone_type"] + 1
+        self.knowledge["actions"].append("transformed waste")
+
     def deleberate(self):
+        if self.knowledge["carried_waste_amount"] == 2:
+            return "transform_waste"
         # First priority: Drop waste if in drop zone and carrying waste
-        if self.knowledge["in_drop_zone"] and self.knowledge["carrying_waste"] > 0:
-            return "drop_waste"
+        if (
+            self.knowledge["in_drop_zone"]
+            and self.knowledge["carried_waste_amount"] > 0
+        ):
+            if self.knowledge["carried_waste_type"] == self.knowledge["zone_type"] + 1:
+                return "drop_waste"
 
         # Second priority: Pick waste if at same position as waste and has capacity
         for _, waste_pos in self.percepts["neighbor_wastes"]:
-            if waste_pos == self.pos and self.max_weight > 0:
+            if waste_pos == self.pos:
                 return "pick_waste"
 
         # Default action: Move
