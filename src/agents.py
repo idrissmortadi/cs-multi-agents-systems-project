@@ -1,6 +1,7 @@
 import random
 
 from mesa import Agent
+from objects import Waste
 
 
 class Drone(Agent):
@@ -68,8 +69,11 @@ class Drone(Agent):
     def drop_waste(self):
         # Only execute if carrying waste
         if self.knowledge["carried_waste_amount"] > 0:
-            self.max_weight = 2  # Reset to full capacity
             self.knowledge["carried_waste_amount"] = 0
+            self.knowledge["carried_waste_type"] = None
+            self.model.add_agent(
+                Waste(self.model, self.knowledge["zone_type"] + 1), self.pos
+            )
             self.knowledge["actions"].append("dropped waste")
             print(f"Drone {self.unique_id} dropped all waste")
             return True
@@ -80,6 +84,7 @@ class Drone(Agent):
         self.knowledge["actions"] = []
 
         # Update drop zone status based on current position
+
         is_drop_zone = (
             self.pos[0] % (self.knowledge["grid_width"] // 3) == 0 and self.pos[0] != 0
         )
@@ -90,7 +95,7 @@ class Drone(Agent):
         self.knowledge["carried_waste_type"] = self.knowledge["zone_type"] + 1
         self.knowledge["actions"].append("transformed waste")
 
-    def deleberate(self):
+    def deliberate(self):
         if self.knowledge["carried_waste_amount"] == 2:
             return "transform_waste"
         # First priority: Drop waste if in drop zone and carrying waste
