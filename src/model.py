@@ -59,6 +59,10 @@ class Environment(Model):
         self.num_agents += 1
         self.schedule.add(agent)
 
+    def get_agent_by_id(self, agent_id):
+        """Retrieve an agent by its unique ID"""
+        return self.agents.select(lambda a: a.unique_id == agent_id)[0]
+
     @staticmethod
     def do(drone: Drone, action: str) -> dict:
         getattr(drone, action)()
