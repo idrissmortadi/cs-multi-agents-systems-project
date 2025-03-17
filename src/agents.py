@@ -40,44 +40,64 @@ class Drone(Agent):
         # Update knowledge about position
         self.knowledge["actions"].append(f"moved to {new_position}")
 
-        # Check if in drop zone (assuming zone boundaries are at grid_width//3 intervals)
+        # Update knowledge about whether position is in drop zone
         is_drop_zone = (
             new_position[0] % (self.knowledge["grid_width"] // 3) == 0
             and new_position[0] != 0
         )
         self.knowledge["in_drop_zone"] = is_drop_zone
 
-        # Drop waste if in drop zone and carrying any
-        if is_drop_zone and self.knowledge["carrying_waste"] > 0:
-            self.drop_waste()
-            self.knowledge["actions"].append("dropped waste")
+    def pick_waste(self):
+        # Find wastes at current position
+        wastes_at_position = [
+            (waste_id, waste_pos)
+            for waste_id, waste_pos in self.percepts["neighbor_wastes"]
+            if waste_pos == self.pos
+        ]
 
-        # Check for waste at new position by examining percepts
-        for waste_id, waste_pos in self.percepts["neighbor_wastes"]:
-            if waste_pos == self.pos:  # If waste is at current position
-                waste = self.model.get_agent_by_id(waste_id)
-                if waste and self.max_weight >= waste.weight:
-                    self.pick_waste(waste)
-                    self.knowledge["actions"].append(f"picked waste {waste_id}")
-                    break  # Only pick one waste at a time
-
-    def pick_waste(self, waste):
-        if self.max_weight >= waste.weight and self.pos == waste.pos:
-            self.max_weight -= waste.weight
-            self.knowledge["carrying_waste"] += waste.weight
-            self.model.grid.remove_agent(waste)
-            print(f"Drone {self.unique_id} picked waste {waste.unique_id}")
+        if wastes_at_position and self.max_weight > 0:
+            waste_id, _ = wastes_at_position[0]  # Get the first waste
+            waste = self.model.get_agent_by_id(waste_id)
+            if waste and self.max_weight >= waste.weight:
+                self.max_weight -= waste.weight
+                self.knowledge["carrying_waste"] += waste.weight
+                self.model.grid.remove_agent(waste)
+                self.knowledge["actions"].append(f"picked waste {waste_id}")
+                print(f"Drone {self.unique_id} picked waste {waste.unique_id}")
+                return True
+        return False
 
     def drop_waste(self):
-        self.max_weight = 2
-        self.knowledge["carrying_waste"] = 0
-        print(f"Drone {self.unique_id} dropped all waste")
+        # Only execute if carrying waste
+        if self.knowledge["carrying_waste"] > 0:
+            self.max_weight = 2  # Reset to full capacity
+            self.knowledge["carrying_waste"] = 0
+            self.knowledge["actions"].append("dropped waste")
+            print(f"Drone {self.unique_id} dropped all waste")
+            return True
+        return False
 
     def update(self):
         self.knowledge["percepts"].append(self.percepts)
         self.knowledge["actions"] = []
 
+        # Update drop zone status based on current position
+        is_drop_zone = (
+            self.pos[0] % (self.knowledge["grid_width"] // 3) == 0 and self.pos[0] != 0
+        )
+        self.knowledge["in_drop_zone"] = is_drop_zone
+
     def deleberate(self):
+        # First priority: Drop waste if in drop zone and carrying waste
+        if self.knowledge["in_drop_zone"] and self.knowledge["carrying_waste"] > 0:
+            return "drop_waste"
+
+        # Second priority: Pick waste if at same position as waste and has capacity
+        for _, waste_pos in self.percepts["neighbor_wastes"]:
+            if waste_pos == self.pos and self.max_weight > 0:
+                return "pick_waste"
+
+        # Default action: Move
         return "move"
 
     def step_agent(self):
