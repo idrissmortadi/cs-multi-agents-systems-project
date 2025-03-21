@@ -10,3 +10,4 @@ Refactor deliberate
     => call "move" ( args ? )
     => checking that you are in (color + 1) * (size/3) row the  "drop_waste"  
 
+Idriss >  the drone will only reset can_pick when it successfully moves to a new position. When it encounters an incompatible waste, it will set can_pick to False, which will cause it to move in the next step (as per your deliberation logic). Then, after moving, can_pick will be reset to True, allowing the drone to try picking up waste at the new location.

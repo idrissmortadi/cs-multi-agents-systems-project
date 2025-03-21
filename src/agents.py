@@ -48,8 +48,7 @@ class Drone(Agent):
             "neighbor_wastes": [],  # [(waste_id, waste_pos), ...]
         }
         self.knowledge = {
-            "carried_waste_type": None,
-            "carried_waste_amount": 0,
+            "inventory": [],  # List of Waste objects being carried
             "can_pick": True,
             "actions": [],
             "percepts": [],
@@ -102,6 +101,13 @@ class Drone(Agent):
                 else [self.pos]
             )
         )
+
+        # If drone is actually moving to a new position (not staying in place)
+        if new_position != self.pos:
+            # Reset can_pick when moving to a new position
+            self.knowledge["can_pick"] = True
+            self.logger.info("Reset can_pick flag after moving")
+
         # Move the agent to the new position
         self.model.grid.move_agent(self, new_position)
 
@@ -126,30 +132,30 @@ class Drone(Agent):
             for waste_id, waste_pos in self.percepts["neighbor_wastes"]
         ]
 
-        if wastes_at_position and self.knowledge["carried_waste_amount"] < 2:
+        # Check if there are any wastes at the drone's current position and if there is space in the inventory
+        if wastes_at_position and len(self.knowledge["inventory"]) < 2:
             waste_id, _ = wastes_at_position[0]
             waste = self.model.get_agent_by_id(waste_id)
             self.logger.info(f"Found waste {waste_id}")
 
+            # Check if waste type is compatible with current inventory
+            inventory_types = [w.waste_color for w in self.knowledge["inventory"]]
             if (
-                waste.waste_color == self.knowledge["carried_waste_type"]
-                or self.knowledge["carried_waste_type"] is None
+                not inventory_types or waste.waste_color in inventory_types
             ) and waste.waste_color == self.knowledge["zone_type"]:
-                self.knowledge["carried_waste_amount"] += waste.weight
-                self.knowledge["carried_waste_type"] = waste.waste_color
-
-                if waste.pos is None:
+                if waste.pos is not None:
+                    self.model.grid.remove_agent(waste)
+                    self.knowledge["inventory"].append(waste)
+                else:
                     self.logger.warning(
                         f"Waste {waste_id} has no position, cannot pick up"
                     )
                     return False
 
-                self.model.grid.remove_agent(waste)
-
                 self.knowledge["actions"].append(f"picked waste {waste_id}")
                 self.logger.info(f"Picked waste {waste.unique_id}")
                 self.logger.info(
-                    f"Now carrying {self.knowledge['carried_waste_amount']} waste of type {self.knowledge['carried_waste_type']}"
+                    f"Now carrying {len(self.knowledge['inventory'])} items in inventory"
                 )
                 return True
             else:
@@ -161,30 +167,24 @@ class Drone(Agent):
 
     def drop_waste(self):
         """
-        Drop carried waste at the drone's current position.
+        Drop a waste item from inventory at the drone's current position.
         Returns:
             bool: True if waste was dropped, False otherwise
         """
-        if self.knowledge["carried_waste_amount"] > 0:
-            self.knowledge["carried_waste_amount"] -= 1
+        # Get the processed waste type from inventory
+        processed_waste = self.knowledge["inventory"].pop(0)
 
-            if self.knowledge["carried_waste_amount"] == 0:
-                self.knowledge["carried_waste_type"] = None
-                self.logger.info("No more waste being carried")
-            else:
-                self.logger.info(
-                    f"Still carrying {self.knowledge['carried_waste_amount']} waste"
-                )
+        # Create a new waste object with the same type
+        new_waste = Waste(self.model, processed_waste.waste_color)
+        del processed_waste
+        self.model.add_agent(new_waste, self.pos)
 
-            new_waste = Waste(self.model, self.knowledge["zone_type"] + 1)
-            self.model.add_agent(new_waste, self.pos)
-
-            self.knowledge["actions"].append("dropped waste")
-            self.logger.info(f"Dropped waste at {self.pos}")
-            return True
-
-        self.logger.info("No waste to drop")
-        return False
+        self.knowledge["actions"].append("dropped waste")
+        self.logger.info(f"Dropped waste at {self.pos}")
+        self.logger.info(
+            f"Inventory now contains {len(self.knowledge['inventory'])} items"
+        )
+        return True
 
     def update(self):
         """
@@ -217,15 +217,24 @@ class Drone(Agent):
 
     def transform_waste(self):
         """
-        Transform carried waste into processed waste.
-        Sets the carried waste amount to 1 and updates the waste type.
+        Transform all waste in the inventory into a single processed waste item.
+        The processed waste type is one level higher than the zone type.
         """
-        prev_type = self.knowledge["carried_waste_type"]
-        self.knowledge["carried_waste_amount"] = 1
-        self.knowledge["carried_waste_type"] = self.knowledge["zone_type"] + 1
+        # Store information about what we're transforming for logging
+        inventory_count = len(self.knowledge["inventory"])
+        waste_types = [w.waste_color for w in self.knowledge["inventory"]]
+
+        # Clear the inventory
+        self.knowledge["inventory"] = []
+
+        # Create one processed waste item and add it to inventory
+        processed_waste = Waste(self.model, self.knowledge["zone_type"] + 1)
+        self.knowledge["inventory"].append(processed_waste)
+
+        # Log the transformation action
         self.knowledge["actions"].append("transformed waste")
         self.logger.info(
-            f"Transformed waste from type {prev_type} to type {self.knowledge['carried_waste_type']}"
+            f"Transformed {inventory_count} waste items of types {waste_types} into type {processed_waste.waste_color}"
         )
 
     def deliberate(self):
@@ -235,45 +244,61 @@ class Drone(Agent):
         Returns:
             str: The action to take ("transform_waste", "drop_waste", "pick_waste", or "move")
         """
+        self.logger.info("============DELEBIRATION=============")
         self.logger.info("Deliberating on next action")
+        self.logger.info(f"Current inventory: {self.knowledge['inventory']}")
+        self.logger.info(f"Can pick waste: {self.knowledge['can_pick']}")
+        self.logger.info(f"Drop zone status: {self.knowledge['in_drop_zone']}")
+        self.logger.info(f"Zone type: {self.knowledge['zone_type']}")
+        self.logger.info(f"Position: {self.pos}")
+        self.logger.info("=====================================")
 
         # Priority 0: Transform waste if carrying maximum capacity
-        if self.knowledge["carried_waste_amount"] == 2:
+        if len(self.knowledge["inventory"]) == 2:
             self.logger.info("Decision: Transform waste (at max capacity)")
             return "transform_waste"
+        elif len(self.knowledge["inventory"]) < 2 and self.knowledge["inventory"]:
+            self.logger.info("Not at max capacity")
+        elif not self.knowledge["inventory"]:
+            self.logger.info("Inventory is empty")
 
-        # Priority 1: Drop waste if in drop zone and carrying waste of the correct type
-        if (
-            self.knowledge["in_drop_zone"]
-            and self.knowledge["carried_waste_amount"] > 0
-        ):
+        # Priority 1: Drop waste if in drop zone and carrying processed waste
+        if self.knowledge["in_drop_zone"] and self.knowledge["inventory"]:
             self.logger.info("In drop zone with waste")
-            if self.knowledge["carried_waste_type"] == (
-                self.knowledge["zone_type"] + 1
+            # Check if waste is of the correct processed type
+            if any(
+                waste.waste_color == (self.knowledge["zone_type"] + 1)
+                for waste in self.knowledge["inventory"]
             ):
                 self.logger.info("Decision: Drop waste (in correct drop zone)")
                 return "drop_waste"
+            else:
+                self.logger.info("Cannot drop waste")
 
         # Priority 2: Pick waste if at same position as compatible waste and has capacity
-        filtered_wastes = []
+        compatible_wastes = []
         for waste_id, waste_pos in self.percepts["neighbor_wastes"]:
             waste = self.model.get_agent_by_id(waste_id)
-            if (
-                waste.waste_color == self.knowledge["carried_waste_type"]
-                or self.knowledge["carried_waste_type"] is None
-            ) and waste.waste_color == self.knowledge["zone_type"]:
-                filtered_wastes.append(waste_id)
+            # Check if waste type is compatible with current inventory
+            inventory_types = [w.waste_color for w in self.knowledge["inventory"]]
 
-        if filtered_wastes:
-            self.logger.info(f"Found {len(filtered_wastes)} compatible wastes nearby")
+            if (
+                not inventory_types or waste.waste_color in inventory_types
+            ) and waste.waste_color == self.knowledge["zone_type"]:
+                compatible_wastes.append(waste_id)
+
+        if compatible_wastes:
+            self.logger.info(f"Found {len(compatible_wastes)} compatible wastes nearby")
 
         if (
-            filtered_wastes
-            and self.knowledge["carried_waste_amount"] < 2
+            compatible_wastes
+            and len(self.knowledge["inventory"]) < 2
             and self.knowledge["can_pick"]
         ):
             self.logger.info("Decision: Pick waste")
             return "pick_waste"
+        elif not self.knowledge["can_pick"]:
+            self.logger.info("Cannot pick waste")
 
         # Default action: Move randomly
         self.logger.info("Decision: Move (default action)")
