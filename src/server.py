@@ -13,15 +13,20 @@ print(f"Mesa version: {mesa.__version__}")
 
 def agent_portrayal(agent: mesa.Agent):
     if isinstance(agent, Waste):
-        markers = {
-            0: "D",  # Diamond
-            1: "o",  # Circle
-            2: "s",  # Square
+        WASTES_COLOR_MAP = {
+            0: "#55AF55",
+            1: "yellow",
+            2: "red",
+        }
+        WASTES_MARKER_MAP = {
+            0: "o",
+            1: "s",
+            2: "D",
         }
 
         portrayal = {
-            "color": "black",
-            "marker": markers.get(agent.waste_color, "D"),
+            "marker": WASTES_MARKER_MAP.get(agent.waste_color, "circle"),
+            "color": WASTES_COLOR_MAP.get(agent.waste_color, "D"),
             "zorder": 101,
             "size": 70,
         }
