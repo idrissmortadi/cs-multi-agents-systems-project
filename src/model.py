@@ -3,6 +3,7 @@ import os
 import shutil
 
 from mesa import Model
+from mesa.datacollection import DataCollector
 from mesa.space import MultiGrid
 
 from agents import Drone
@@ -29,6 +30,34 @@ class Environment(Model):
 
         # Set up logging for environment
         self._setup_logging()
+
+        # Set up data collector
+        self.datacollector = DataCollector(
+            model_reporters={
+                "green_wastes": lambda m: len(
+                    [
+                        a
+                        for a in m.grid.agents
+                        if isinstance(a, Waste) and a.waste_color == 0
+                    ]
+                ),
+                "yellow_wastes": lambda m: len(
+                    [
+                        a
+                        for a in m.grid.agents
+                        if isinstance(a, Waste) and a.waste_color == 1
+                    ]
+                ),
+                "red_wastes": lambda m: len(
+                    [
+                        a
+                        for a in m.grid.agents
+                        if isinstance(a, Waste) and a.waste_color == 2
+                    ]
+                ),
+            },
+            agent_reporters={},
+        )
 
         # Store number of agents and wastes per zone type
         self.green_agents = green_agents
@@ -171,6 +200,7 @@ class Environment(Model):
         self.logger.addHandler(file_handler)
 
     def step(self):
+        self.datacollector.collect(self)
         self.logger.info("Starting a new step in the environment")
         self.agents.shuffle_do("step_agent")
 
@@ -183,7 +213,6 @@ class Environment(Model):
 
     def remove_agent(self, agent):
         self.grid.remove_agent(agent)
-        # self.schedule.remove(agent)
         self.num_agents -= 1
         self.logger.info(f"Removed agent {agent.unique_id} from the environment")
 
