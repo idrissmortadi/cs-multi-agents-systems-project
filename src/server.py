@@ -16,8 +16,8 @@ def agent_portrayal(agent: mesa.Agent):
         markers = {
             0: "D",  # Diamond
             1: "o",  # Circle
-            2: "s",
-        }  # Square
+            2: "s",  # Square
+        }
 
         portrayal = {
             "color": "black",
