@@ -29,6 +29,7 @@ class Drone(Agent):
         self.knowledge = {
             "carried_waste_type": None,
             "carried_waste_amount": 0,
+            "can_pick": True,
             "actions": [],
             "percepts": [],
             "grid_width": self.model.grid.width,
@@ -51,7 +52,6 @@ class Drone(Agent):
                 else [self.pos]
             )
         )
-        print(f"Drone {self.unique_id} moving from {self.pos} to {new_position}")
         # Move the agent to the new position
         self.model.grid.move_agent(self, new_position)
 
@@ -83,6 +83,7 @@ class Drone(Agent):
         if wastes_at_position and self.knowledge["carried_waste_amount"] < 2:
             waste_id, _ = wastes_at_position[0]  # Get the first waste
             waste = self.model.get_agent_by_id(waste_id)
+            print(f"Drone {self.unique_id} found waste {waste_id}")
 
             # Check if the waste color matches the carried waste type or if the drone is not carrying any waste
             if (
@@ -94,6 +95,8 @@ class Drone(Agent):
                 self.knowledge["carried_waste_type"] = waste.waste_color
 
                 # Remove the waste from the grid
+                if waste.pos is None:
+                    return False
                 self.model.grid.remove_agent(waste)
 
                 # Log the action
@@ -103,6 +106,8 @@ class Drone(Agent):
                     f"Drone {self.unique_id} is carrying {self.knowledge['carried_waste_amount']} waste"
                 )
                 return True
+            else:
+                self.knowledge["can_pick"] = False
 
         # Return False if no waste was picked
         print(f"Drone {self.unique_id} did not pick any waste")
@@ -195,11 +200,14 @@ class Drone(Agent):
                 or self.knowledge["carried_waste_type"] is None
             ) and waste.waste_color == self.knowledge["zone_type"]:
                 filtered_wastes.append(waste_id)
-        if filtered_wastes and self.knowledge["carried_waste_amount"] < 2:
+        if (
+            filtered_wastes
+            and self.knowledge["carried_waste_amount"] < 2
+            and self.knowledge["can_pick"]
+        ):
             return "pick_waste"
 
         # Default action: Move randomly
-        print("Moving")
         return "move"
 
     def step_agent(self):
