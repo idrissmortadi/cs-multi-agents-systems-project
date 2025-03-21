@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 
 from mesa import Model
 from mesa.space import MultiGrid
@@ -9,23 +10,53 @@ from objects import Waste, Zone
 
 
 class Environment(Model):
-    def __init__(self, n=1, num_wastes=10, width=9, height=9, seed=None):
+    def __init__(
+        self,
+        green_agents=1,
+        yellow_agents=0,
+        red_agents=0,
+        green_wastes=5,
+        yellow_wastes=3,
+        red_wastes=2,
+        width=9,
+        height=9,
+        seed=None,
+    ):
         super().__init__(seed=seed)
+
+        # Clear old log files before setting up new ones
+        self._clear_logs()
 
         # Set up logging for environment
         self._setup_logging()
 
-        self.num_agents = n
-        self.num_wastes = num_wastes
+        # Store number of agents and wastes per zone type
+        self.green_agents = green_agents
+        self.yellow_agents = yellow_agents
+        self.red_agents = red_agents
+
+        self.green_wastes = green_wastes
+        self.yellow_wastes = yellow_wastes
+        self.red_wastes = red_wastes
+
+        self.num_agents = green_agents + yellow_agents + red_agents
+        self.num_wastes = green_wastes + yellow_wastes + red_wastes
 
         # No torus, agents cannot move off the grid
         self.grid = MultiGrid(width, height, torus=False)
         self.zone_mapping = {"G": 0, "Y": 1, "R": 2}
 
         self.logger.info(
-            "Initializing environment with %d agents, %d wastes, %dx%d grid",
-            n,
-            num_wastes,
+            "Initializing environment with %d agents (%d green, %d yellow, %d red), "
+            "%d wastes (%d green, %d yellow, %d red), %dx%d grid",
+            self.num_agents,
+            green_agents,
+            yellow_agents,
+            red_agents,
+            self.num_wastes,
+            green_wastes,
+            yellow_wastes,
+            red_wastes,
             width,
             height,
         )
@@ -37,26 +68,79 @@ class Environment(Model):
                 a = Zone(self, zone_color)
                 self.grid.place_agent(a, (x, y))
 
-        # Initialize wastes randomly
-        for _ in range(self.num_wastes):
-            x, y = self.random.randrange(width), self.random.randrange(height)
-            waste_color = self._get_zone((x, y)).zone_type
+        # Initialize wastes in each zone type
+        self._initialize_wastes_by_zone(0, green_wastes, width, height)  # Green zone
+        self._initialize_wastes_by_zone(1, yellow_wastes, width, height)  # Yellow zone
+        self._initialize_wastes_by_zone(2, red_wastes, width, height)  # Red zone
 
-            a = Waste(self, waste_color)
-            self.grid.place_agent(a, (x, y))
-            self.logger.info(
-                f"Placed waste {a.unique_id} at position ({x}, {y}) with color {waste_color}"
-            )
+        # Initialize agents in each zone type
+        self._initialize_drones_by_zone(0, green_agents, width, height)  # Green zone
+        self._initialize_drones_by_zone(1, yellow_agents, width, height)  # Yellow zone
+        self._initialize_drones_by_zone(2, red_agents, width, height)  # Red zone
 
-        # Initialize agents randomly
-        for _ in range(self.num_agents):
-            x, y = self.random.randrange(width), self.random.randrange(height)
-            zone_type = self._get_zone((x, y)).zone_type
-            a = Drone(self, zone_type)
-            self.grid.place_agent(a, (x, y))
-            self.logger.info(
-                f"Placed drone {a.unique_id} at position ({x}, {y}) in zone type {zone_type}"
-            )
+    def _clear_logs(self):
+        """Clear all existing log files before starting a new simulation"""
+        logs_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs"
+        )
+
+        if os.path.exists(logs_dir):
+            # Delete the agents directory completely
+            agents_dir = os.path.join(logs_dir, "agents")
+            if os.path.exists(agents_dir):
+                shutil.rmtree(agents_dir)
+
+            # Delete the environment log file if it exists
+            env_log_file = os.path.join(logs_dir, "environment.log")
+            if os.path.exists(env_log_file):
+                os.remove(env_log_file)
+
+            # Optional: Log to console that logs were cleared
+            print("Cleared previous log files.")
+
+    def _initialize_wastes_by_zone(self, zone_type, num_wastes, width, height):
+        """Initialize the specified number of wastes in a specific zone type"""
+        zone_positions = []
+
+        # Find all positions of the specified zone type
+        for x in range(width):
+            for y in range(height):
+                pos = (x, y)
+                zone = self._get_zone(pos)
+                if zone and zone.zone_type == zone_type:
+                    zone_positions.append(pos)
+
+        # Create wastes in the zone
+        for _ in range(num_wastes):
+            if zone_positions:
+                pos = self.random.choice(zone_positions)
+                a = Waste(self, zone_type)
+                self.grid.place_agent(a, pos)
+                self.logger.info(
+                    f"Placed waste {a.unique_id} at position {pos} with color {zone_type}"
+                )
+
+    def _initialize_drones_by_zone(self, zone_type, num_drones, width, height):
+        """Initialize the specified number of drones in a specific zone type"""
+        zone_positions = []
+
+        # Find all positions of the specified zone type
+        for x in range(width):
+            for y in range(height):
+                pos = (x, y)
+                zone = self._get_zone(pos)
+                if zone and zone.zone_type == zone_type:
+                    zone_positions.append(pos)
+
+        # Create drones in the zone
+        for _ in range(num_drones):
+            if zone_positions:
+                pos = self.random.choice(zone_positions)
+                a = Drone(self, zone_type)
+                self.grid.place_agent(a, pos)
+                self.logger.info(
+                    f"Placed drone {a.unique_id} at position {pos} in zone type {zone_type}"
+                )
 
     def _setup_logging(self):
         """Set up logging for the environment"""
