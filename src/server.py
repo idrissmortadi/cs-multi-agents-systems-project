@@ -52,7 +52,7 @@ model_params = {
     "num_wastes": {
         "type": "SliderInt",
         "value": 1,
-        "label": "Number of agents:",
+        "label": "Number of wastes:",
         "min": 1,
         "max": 100,
         "step": 1,
