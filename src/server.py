@@ -1,8 +1,5 @@
 import mesa
-from mesa.visualization import (
-    SolaraViz,
-    make_space_component,
-)
+from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
 from agents import Drone
 from model import Environment
@@ -128,11 +125,11 @@ money_model = Environment(
 )
 
 SpaceGraph = make_space_component(agent_portrayal)
-# GiniEthnicityPlot = make_plot_component(["Gini_Mixed", "Gini_Green", "Gini_Blue"])
+WastesPlot = make_plot_component(["green_wastes", "yellow_wastes", "red_wastes"])
 
 page = SolaraViz(
     money_model,
-    components=[SpaceGraph],
+    components=[SpaceGraph, WastesPlot],
     model_params=model_params,
     name="Simple",
 )
