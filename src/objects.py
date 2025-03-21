@@ -18,6 +18,12 @@ class Waste(Agent):
     def step_agent(self):
         pass
 
+    def __str__(self):
+        return f"Waste({self.waste_color})"
+
+    def __repr__(self):
+        return f"Waste({self.waste_color})"
+
 
 class Zone(Agent):
     def __init__(self, model, zone_type: Literal[0, 1, 2]):
@@ -26,3 +32,9 @@ class Zone(Agent):
 
     def step_agent(self):
         pass
+
+    def __repr__(self):
+        return f"Zone({self.zone_type})"
+
+    def __str__(self):
+        return f"Zone({self.zone_type})"
