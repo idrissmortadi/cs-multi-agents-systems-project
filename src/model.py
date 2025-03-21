@@ -1,3 +1,6 @@
+import logging
+import os
+
 from mesa import Model
 from mesa.space import MultiGrid
 
@@ -9,12 +12,23 @@ class Environment(Model):
     def __init__(self, n=1, num_wastes=10, width=9, height=9, seed=None):
         super().__init__(seed=seed)
 
+        # Set up logging for environment
+        self._setup_logging()
+
         self.num_agents = n
         self.num_wastes = num_wastes
 
         # No torus, agents cannot move off the grid
         self.grid = MultiGrid(width, height, torus=False)
         self.zone_mapping = {"G": 0, "Y": 1, "R": 2}
+
+        self.logger.info(
+            "Initializing environment with %d agents, %d wastes, %dx%d grid",
+            n,
+            num_wastes,
+            width,
+            height,
+        )
 
         # Initialize zones
         for x in range(width):
@@ -30,6 +44,9 @@ class Environment(Model):
 
             a = Waste(self, waste_color)
             self.grid.place_agent(a, (x, y))
+            self.logger.info(
+                f"Placed waste {a.unique_id} at position ({x}, {y}) with color {waste_color}"
+            )
 
         # Initialize agents randomly
         for _ in range(self.num_agents):
@@ -37,8 +54,40 @@ class Environment(Model):
             zone_type = self._get_zone((x, y)).zone_type
             a = Drone(self, zone_type)
             self.grid.place_agent(a, (x, y))
+            self.logger.info(
+                f"Placed drone {a.unique_id} at position ({x}, {y}) in zone type {zone_type}"
+            )
+
+    def _setup_logging(self):
+        """Set up logging for the environment"""
+        # Create logs directory if it doesn't exist
+        logs_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs"
+        )
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+
+        # Create agents directory if it doesn't exist
+        agents_dir = os.path.join(logs_dir, "agents")
+        if not os.path.exists(agents_dir):
+            os.makedirs(agents_dir)
+
+        # Set up environment logger
+        self.logger = logging.getLogger("environment")
+        self.logger.setLevel(logging.INFO)
+
+        # Remove any existing handlers to avoid duplicates
+        if self.logger.handlers:
+            self.logger.handlers.clear()
+
+        # File handler for environment
+        file_handler = logging.FileHandler(os.path.join(logs_dir, "environment.log"))
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
 
     def step(self):
+        self.logger.info("Starting a new step in the environment")
         self.agents.shuffle_do("step_agent")
 
     def _get_zone(self, pos):
@@ -52,11 +101,13 @@ class Environment(Model):
         self.grid.remove_agent(agent)
         # self.schedule.remove(agent)
         self.num_agents -= 1
+        self.logger.info(f"Removed agent {agent.unique_id} from the environment")
 
     def add_agent(self, agent, pos):
         self.grid.place_agent(agent, pos)
         self.num_agents += 1
         # self.schedule.add(agent)
+        self.logger.info(f"Added agent {agent.unique_id} at position {pos}")
 
     def get_agent_by_id(self, agent_id):
         """Retrieve an agent by its unique ID"""
@@ -65,6 +116,9 @@ class Environment(Model):
     @staticmethod
     def do(drone: Drone, action: str) -> dict:
         getattr(drone, action)()
+
+        # Log the action
+        drone.logger.info(f"Executing action: {action}")
 
         neighbors = drone.model.grid.get_neighborhood(
             drone.pos, moore=False, include_center=False

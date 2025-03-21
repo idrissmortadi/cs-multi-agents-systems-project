@@ -1,8 +1,20 @@
+import logging
+import os
 import random
 
 from mesa import Agent
 
 from objects import Waste
+
+# Set up module-level logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 
 class Drone(Agent):
@@ -20,6 +32,14 @@ class Drone(Agent):
             zone_type: The type of zone the drone is assigned to
         """
         super().__init__(model)
+
+        # Setup individual agent logger
+        self._setup_logger()
+
+        self.logger.info(
+            f"Initializing drone {self.unique_id} with zone type {zone_type}"
+        )
+
         self.percepts = {
             "neighbors_empty": [],  # [(x, y), ...] in correponding zone color
             "neighbor_zones": [],  # [(zone_type, zone_pos), ...]
@@ -37,6 +57,35 @@ class Drone(Agent):
             "zone_type": zone_type,
             "in_drop_zone": False,  # Whether drone is in a drop zone
         }
+
+    def _setup_logger(self):
+        """Set up individual logging for this drone"""
+        # Get path to logs directory
+        logs_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs"
+        )
+        agents_dir = os.path.join(logs_dir, "agents")
+
+        # Create dirs if they don't exist
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+        if not os.path.exists(agents_dir):
+            os.makedirs(agents_dir)
+
+        # Set up logger for this specific drone
+        self.logger = logging.getLogger(f"agent_{self.unique_id}")
+        self.logger.setLevel(logging.INFO)
+
+        # Remove any existing handlers to avoid duplicates
+        if self.logger.handlers:
+            self.logger.handlers.clear()
+
+        # Add file handler
+        log_file = os.path.join(agents_dir, f"agent_{self.unique_id}.log")
+        file_handler = logging.FileHandler(log_file)
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
 
     def move(self):
         """
@@ -57,90 +106,83 @@ class Drone(Agent):
 
         # Update knowledge about position
         self.knowledge["actions"].append(f"moved to {new_position}")
+        self.logger.info(f"Moved to position {new_position}")
 
         # Update knowledge about whether position is in drop zone
         is_drop_zone = new_position[0] == (self.knowledge["zone_type"] * 3 + 2)
         self.knowledge["in_drop_zone"] = is_drop_zone
+        if is_drop_zone:
+            self.logger.info("Entered drop zone")
 
     def pick_waste(self):
         """
-        Pick up waste at the drone's current position if:
-        1. There is waste at the position
-        2. The drone can carry more waste (less than 2 units)
-        3. The waste color matches the drone's zone type
-        4. The waste color matches the already carried waste type (if any)
-
+        Pick up waste at the drone's current position if conditions are met.
         Returns:
             bool: True if waste was picked up, False otherwise
         """
-        # Find wastes at current position
         wastes_at_position = [
             (waste_id, waste_pos)
             for waste_id, waste_pos in self.percepts["neighbor_wastes"]
         ]
 
-        # Check if there are wastes at the current position and the drone can carry more waste
         if wastes_at_position and self.knowledge["carried_waste_amount"] < 2:
-            waste_id, _ = wastes_at_position[0]  # Get the first waste
+            waste_id, _ = wastes_at_position[0]
             waste = self.model.get_agent_by_id(waste_id)
-            print(f"Drone {self.unique_id} found waste {waste_id}")
+            self.logger.info(f"Found waste {waste_id}")
 
-            # Check if the waste color matches the carried waste type or if the drone is not carrying any waste
             if (
                 waste.waste_color == self.knowledge["carried_waste_type"]
                 or self.knowledge["carried_waste_type"] is None
             ) and waste.waste_color == self.knowledge["zone_type"]:
-                # Update the drone's carried waste amount and type
                 self.knowledge["carried_waste_amount"] += waste.weight
                 self.knowledge["carried_waste_type"] = waste.waste_color
 
-                # Remove the waste from the grid
                 if waste.pos is None:
+                    self.logger.warning(
+                        f"Waste {waste_id} has no position, cannot pick up"
+                    )
                     return False
+
                 self.model.grid.remove_agent(waste)
 
-                # Log the action
                 self.knowledge["actions"].append(f"picked waste {waste_id}")
-                print(f"Drone {self.unique_id} picked waste {waste.unique_id}")
-                print(
-                    f"Drone {self.unique_id} is carrying {self.knowledge['carried_waste_amount']} waste"
+                self.logger.info(f"Picked waste {waste.unique_id}")
+                self.logger.info(
+                    f"Now carrying {self.knowledge['carried_waste_amount']} waste of type {self.knowledge['carried_waste_type']}"
                 )
                 return True
             else:
                 self.knowledge["can_pick"] = False
+                self.logger.info(f"Cannot pick waste {waste_id} - incompatible type")
 
-        # Return False if no waste was picked
-        print(f"Drone {self.unique_id} did not pick any waste")
+        self.logger.info("Did not pick any waste")
         return False
 
     def drop_waste(self):
         """
-        Drop the waste the drone is carrying at its current position.
-        This method is only executed if the drone is carrying waste.
-
+        Drop carried waste at the drone's current position.
         Returns:
             bool: True if waste was dropped, False otherwise
         """
-        # Check if the drone is carrying any waste
         if self.knowledge["carried_waste_amount"] > 0:
-            # Decrease the carried waste amount
             self.knowledge["carried_waste_amount"] -= 1
 
-            # Reset the carried waste type if no more waste is carried
             if self.knowledge["carried_waste_amount"] == 0:
                 self.knowledge["carried_waste_type"] = None
+                self.logger.info("No more waste being carried")
+            else:
+                self.logger.info(
+                    f"Still carrying {self.knowledge['carried_waste_amount']} waste"
+                )
 
-            # Create a new waste agent at the current position
             new_waste = Waste(self.model, self.knowledge["zone_type"] + 1)
             self.model.add_agent(new_waste, self.pos)
 
-            # Log the action
             self.knowledge["actions"].append("dropped waste")
-            print(f"Drone {self.unique_id} dropped waste at {self.pos}")
-
+            self.logger.info(f"Dropped waste at {self.pos}")
             return True
 
-        # Return False if no waste was dropped
+        self.logger.info("No waste to drop")
         return False
 
     def update(self):
@@ -153,19 +195,37 @@ class Drone(Agent):
         # Reset actions for the new step
         self.knowledge["actions"] = []
 
+        self.logger.info(f"Starting update at position {self.pos}")
+
+        # Log percepts information
+        self.logger.debug(f"Empty neighbors: {len(self.percepts['neighbors_empty'])}")
+        self.logger.debug(f"Neighboring zones: {len(self.percepts['neighbor_zones'])}")
+        self.logger.debug(
+            f"Neighboring drones: {len(self.percepts['neighbor_drones'])}"
+        )
+        self.logger.debug(
+            f"Neighboring wastes: {len(self.percepts['neighbor_wastes'])}"
+        )
+
         # Update drop zone status based on current position
         # Check if the drone is in a drop zone (x-coordinate equals zone_type * 3 + 2)
         is_drop_zone = self.pos[0] == (self.knowledge["zone_type"] * 3 + 2)
         self.knowledge["in_drop_zone"] = is_drop_zone
+        if is_drop_zone:
+            self.logger.info("Currently in drop zone")
 
     def transform_waste(self):
         """
         Transform carried waste into processed waste.
         Sets the carried waste amount to 1 and updates the waste type.
         """
+        prev_type = self.knowledge["carried_waste_type"]
         self.knowledge["carried_waste_amount"] = 1
         self.knowledge["carried_waste_type"] = self.knowledge["zone_type"] + 1
         self.knowledge["actions"].append("transformed waste")
+        self.logger.info(
+            f"Transformed waste from type {prev_type} to type {self.knowledge['carried_waste_type']}"
+        )
 
     def deliberate(self):
         """
@@ -174,9 +234,11 @@ class Drone(Agent):
         Returns:
             str: The action to take ("transform_waste", "drop_waste", "pick_waste", or "move")
         """
+        self.logger.info("Deliberating on next action")
+
         # Priority 0: Transform waste if carrying maximum capacity
         if self.knowledge["carried_waste_amount"] == 2:
-            print("Transforming waste")
+            self.logger.info("Decision: Transform waste (at max capacity)")
             return "transform_waste"
 
         # Priority 1: Drop waste if in drop zone and carrying waste of the correct type
@@ -184,11 +246,11 @@ class Drone(Agent):
             self.knowledge["in_drop_zone"]
             and self.knowledge["carried_waste_amount"] > 0
         ):
-            print("Reached drop zone")
+            self.logger.info("In drop zone with waste")
             if self.knowledge["carried_waste_type"] == (
                 self.knowledge["zone_type"] + 1
             ):
-                print("Dropping waste")
+                self.logger.info("Decision: Drop waste (in correct drop zone)")
                 return "drop_waste"
 
         # Priority 2: Pick waste if at same position as compatible waste and has capacity
@@ -200,14 +262,20 @@ class Drone(Agent):
                 or self.knowledge["carried_waste_type"] is None
             ) and waste.waste_color == self.knowledge["zone_type"]:
                 filtered_wastes.append(waste_id)
+
+        if filtered_wastes:
+            self.logger.info(f"Found {len(filtered_wastes)} compatible wastes nearby")
+
         if (
             filtered_wastes
             and self.knowledge["carried_waste_amount"] < 2
             and self.knowledge["can_pick"]
         ):
+            self.logger.info("Decision: Pick waste")
             return "pick_waste"
 
         # Default action: Move randomly
+        self.logger.info("Decision: Move (default action)")
         return "move"
 
     def step_agent(self):
@@ -217,6 +285,8 @@ class Drone(Agent):
         2. Decide on an action
         3. Execute the action and update percepts
         """
+        self.logger.info("Starting step")
         self.update()
         action = self.deliberate()
         self.percepts = self.model.do(self, action)
+        self.logger.info("Finished step")

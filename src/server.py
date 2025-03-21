@@ -22,13 +22,13 @@ def agent_portrayal(agent: mesa.Agent):
         portrayal = {
             "color": "black",
             "marker": markers.get(agent.waste_color, "D"),
-            "zorder": 100,
+            "zorder": 101,
             "size": 70,
         }
     elif isinstance(agent, Drone):
         portrayal = {
             "color": "purple",
-            "zorder": 101,
+            "zorder": 100,
         }
     elif isinstance(agent, Zone):
         return {
