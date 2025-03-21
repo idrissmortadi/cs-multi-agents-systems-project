@@ -35,6 +35,7 @@ class Drone(Agent):
 
         # Setup individual agent logger
         self._setup_logger()
+        self.zone_type = zone_type
 
         self.logger.info(
             f"Initializing drone {self.unique_id} with zone type {zone_type}"
