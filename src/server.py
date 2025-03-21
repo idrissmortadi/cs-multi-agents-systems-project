@@ -26,8 +26,13 @@ def agent_portrayal(agent: mesa.Agent):
             "size": 70,
         }
     elif isinstance(agent, Drone):
+        AGENT_COLOR_MAP = {
+            0: "#00FF00",
+            1: "yellow",
+            2: "red",
+        }
         portrayal = {
-            "color": "purple",
+            "color": AGENT_COLOR_MAP.get(agent.zone_type, "purple"),
             "zorder": 100,
         }
     elif isinstance(agent, Zone):
@@ -41,26 +46,81 @@ def agent_portrayal(agent: mesa.Agent):
 
 
 model_params = {
-    "n": {
+    "green_agents": {
         "type": "SliderInt",
         "value": 1,
-        "label": "Number of agents:",
+        "label": "Number of green agents",
         "min": 1,
         "max": 100,
         "step": 1,
     },
-    "num_wastes": {
+    "yellow_agents": {
         "type": "SliderInt",
-        "value": 1,
-        "label": "Number of wastes:",
-        "min": 1,
+        "value": 0,
+        "label": "Number of yellow agents",
+        "min": 0,
         "max": 100,
         "step": 1,
     },
-    "width": 9,
-    "height": 9,
+    "red_agents": {
+        "type": "SliderInt",
+        "value": 0,
+        "label": "Number of red agents",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+    },
+    "green_wastes": {
+        "type": "SliderInt",
+        "value": 5,
+        "label": "Number of green wastes",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+    },
+    "yellow_wastes": {
+        "type": "SliderInt",
+        "value": 3,
+        "label": "Number of yellow wastes",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+    },
+    "red_wastes": {
+        "type": "SliderInt",
+        "value": 2,
+        "label": "Number of red wastes",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+    },
+    "width": {
+        "type": "SliderInt",
+        "value": 9,
+        "label": "Grid width:",
+        "min": 9,
+        "max": 100,
+        "step": 1,
+    },
+    "height": {
+        "type": "SliderInt",
+        "value": 9,
+        "label": "Grid height:",
+        "min": 9,
+        "max": 100,
+        "step": 1,
+    },
 }
-money_model = Environment(n=1, num_wastes=2, width=9, height=9)
+money_model = Environment(
+    green_agents=1,
+    yellow_agents=1,
+    red_agents=1,
+    green_wastes=5,
+    yellow_wastes=3,
+    red_wastes=2,
+    width=9,
+    height=9,
+)
 
 SpaceGraph = make_space_component(agent_portrayal)
 # GiniEthnicityPlot = make_plot_component(["Gini_Mixed", "Gini_Green", "Gini_Blue"])

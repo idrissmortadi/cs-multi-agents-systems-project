@@ -3,9 +3,9 @@ from typing import Literal
 from mesa import Agent
 
 COLORS_MAP = {
-    0: "green",
-    1: "yellow",
-    2: "red",
+    0: "#008800",
+    1: "#CCCC00",
+    2: "#880000",
 }
 
 
