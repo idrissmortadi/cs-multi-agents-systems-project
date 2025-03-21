@@ -59,6 +59,9 @@ class Drone(Agent):
             ) and waste.waste_color == self.knowledge["zone_type"]:
                 self.knowledge["carried_waste_amount"] += waste.weight
                 self.knowledge["carried_waste_type"] = waste.waste_color
+                if waste.pos is None:
+                    print("Waste pos is None")
+                    return False
                 self.model.grid.remove_agent(waste)
                 self.knowledge["actions"].append(f"picked waste {waste_id}")
                 print(f"Drone {self.unique_id} picked waste {waste.unique_id}")
