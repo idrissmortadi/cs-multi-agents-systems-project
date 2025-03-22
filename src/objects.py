@@ -19,10 +19,10 @@ class Waste(Agent):
         pass
 
     def __str__(self):
-        return f"Waste({self.waste_color})"
+        return f"Waste(id={self.unique_id}, color={self.waste_color})"
 
     def __repr__(self):
-        return f"Waste({self.waste_color})"
+        return self.__str__()
 
 
 class Zone(Agent):
