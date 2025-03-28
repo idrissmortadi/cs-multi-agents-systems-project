@@ -50,6 +50,7 @@ class Drone(Agent):
         self.knowledge = {
             "inventory": [],  # List of Waste objects being carried
             "can_pick": True,
+            "move_east": False,
             "actions": [],
             "percepts": [],
             "grid_width": self.model.grid.width,
@@ -94,13 +95,22 @@ class Drone(Agent):
         Updates the drone's knowledge after moving.
         """
         # Choose a new position from available empty neighbors or stay in place
-        new_position = random.choice(
-            (
-                self.percepts["neighbors_empty"]
-                if len(self.percepts["neighbors_empty"]) > 0
-                else [self.pos]
+        if self.knowledge["move_east"]:
+            east_positions = [
+                pos for pos in self.percepts["neighbors_empty"] if pos[0] > self.pos[0]
+            ]
+            if east_positions:
+                new_position = east_positions[0]
+            else:
+                new_position = self.pos
+        else:
+            new_position = random.choice(
+                (
+                    self.percepts["neighbors_empty"]
+                    if len(self.percepts["neighbors_empty"]) > 0
+                    else [self.pos]
+                )
             )
-        )
 
         # If drone is actually moving to a new position (not staying in place)
         if new_position != self.pos:
@@ -184,6 +194,11 @@ class Drone(Agent):
         self.logger.info(
             f"Inventory now contains {len(self.knowledge['inventory'])} items"
         )
+
+        # Don't move east after dropping waste
+        self.knowledge["move_east"] = False
+        self.logger.info("Unset move_east flag after dropping waste")
+
         return True
 
     def update(self):
@@ -230,6 +245,10 @@ class Drone(Agent):
         # Create one processed waste item and add it to inventory
         processed_waste = Waste(self.model, self.knowledge["zone_type"] + 1)
         self.knowledge["inventory"].append(processed_waste)
+
+        # Move east after transforming
+        self.knowledge["move_east"] = True
+        self.logger.info("Set move_east flag after transforming")
 
         # Log the transformation action
         self.knowledge["actions"].append("transformed waste")
