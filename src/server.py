@@ -11,13 +11,13 @@ print(f"Mesa version: {mesa.__version__}")
 def agent_portrayal(agent: mesa.Agent):
     if isinstance(agent, Waste):
         WASTES_COLOR_MAP = {
-            0: "#55AF55",
+            0: "#00FF00",
             1: "yellow",
             2: "red",
         }
         WASTES_MARKER_MAP = {
-            0: "o",
-            1: "D",
+            0: "*",
+            1: "*",
             2: "*",
         }
 
@@ -25,41 +25,54 @@ def agent_portrayal(agent: mesa.Agent):
             "marker": WASTES_MARKER_MAP.get(agent.waste_color, "o"),
             "color": WASTES_COLOR_MAP.get(agent.waste_color, "black"),
             "zorder": 101,
-            "size": 70,
+            # "size": 100,
         }
     elif isinstance(agent, Drone):
         AGENT_COLOR_MAP = {
             0: "#00FF00",
-            1: "yellow",
-            2: "red",
+            1: "#FFFF00",
+            2: "#FF0000",
         }
         portrayal = {
             "color": AGENT_COLOR_MAP.get(agent.zone_type, "purple"),
+            "marker": "o",
             "zorder": 100,
-            "size": 500,
+            # "size": 500,
         }
     elif isinstance(agent, Zone):
         if agent.is_drop_zone:
             portrayal = {
                 "marker": "s",
-                "color": "black",
+                "color": "red",
                 "zorder": 99,
-                "size": 1000,
+                # "size": 1000,
             }
         else:
-            return {
-                "marker": "s",
-                "color": COLORS_MAP[agent.zone_type],
-                "zorder": 99,
-                "size": 1000,
-            }
+            if (
+                agent.pos[0] % (agent.model.grid.width // 3)
+                == agent.model.grid.width // 3 - 1
+                and agent.pos[0] < agent.model.grid.width // 3 * 2
+            ):
+                portrayal = {
+                    "marker": "s",
+                    "color": COLORS_MAP[agent.zone_type],
+                    "zorder": 99,
+                    # "size": 1000,
+                }
+            else:
+                portrayal = {
+                    "marker": "s",
+                    "color": "white",
+                    "zorder": 99,
+                    # "size": 1000,
+                }
     return portrayal
 
 
 model_params = {
     "green_agents": {
         "type": "SliderInt",
-        "value": 1,
+        "value": 3,
         "label": "Number of green agents",
         "min": 1,
         "max": 100,
@@ -67,7 +80,7 @@ model_params = {
     },
     "yellow_agents": {
         "type": "SliderInt",
-        "value": 0,
+        "value": 3,
         "label": "Number of yellow agents",
         "min": 0,
         "max": 100,
@@ -75,7 +88,7 @@ model_params = {
     },
     "red_agents": {
         "type": "SliderInt",
-        "value": 0,
+        "value": 3,
         "label": "Number of red agents",
         "min": 0,
         "max": 100,
@@ -83,7 +96,7 @@ model_params = {
     },
     "green_wastes": {
         "type": "SliderInt",
-        "value": 5,
+        "value": 8,
         "label": "Number of green wastes",
         "min": 0,
         "max": 100,
