@@ -94,8 +94,13 @@ class Environment(Model):
         for x in range(width):
             for y in range(height):
                 zone_color = 0 if x < width // 3 else 1 if x < 2 * width // 3 else 2
-                a = Zone(self, zone_color)
+                is_drop_zone = True if x == width - 1 else False
+                a = Zone(self, zone_color, is_drop_zone)
                 self.grid.place_agent(a, (x, y))
+                self.logger.info(
+                    f"Placed zone {a.unique_id} at position {(x, y)} with color {zone_color} | "
+                    f"Zone type: {zone_color}, Drop zone: {is_drop_zone}"
+                )
 
         # Initialize wastes in each zone type
         self._initialize_wastes_by_zone(0, green_wastes, width, height)  # Green zone
@@ -130,6 +135,10 @@ class Environment(Model):
     def _initialize_wastes_by_zone(self, zone_type, num_wastes, width, height):
         """Initialize the specified number of wastes in a specific zone type"""
         zone_positions = []
+
+        # Exclude the drop zone for red wastes
+        if zone_type == 2:
+            width = width - 1
 
         # Find all positions of the specified zone type
         for x in range(width):
@@ -201,7 +210,7 @@ class Environment(Model):
 
     def step(self):
         self.datacollector.collect(self)
-        self.logger.info("Starting a new step in the environment")
+        # self.logger.info("Starting a new step in the environment")
         self.agents.shuffle_do("step_agent")
 
     def _get_zone(self, pos):
