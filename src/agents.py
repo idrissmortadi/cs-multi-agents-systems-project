@@ -80,11 +80,13 @@ class Drone(Agent):
 
         # Remove any existing handlers to avoid duplicates
         if self.logger.handlers:
-            self.logger.handlers.clear()
+            for handler in list(self.logger.handlers):
+                handler.close()
+                self.logger.removeHandler(handler)
 
-        # Add file handler
+        # Add file handler that overwrites the file (mode='w')
         log_file = os.path.join(agents_dir, f"agent_{self.unique_id}.log")
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(log_file, mode="w")
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)

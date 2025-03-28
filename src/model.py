@@ -119,18 +119,48 @@ class Environment(Model):
         )
 
         if os.path.exists(logs_dir):
-            # Delete the agents directory completely
+            # Close all existing handlers first to release file locks
+            import logging
+
+            loggers_to_reset = [logging.getLogger("environment")]
+
+            # Find all agent loggers and add them to the reset list
+            for name in list(logging.Logger.manager.loggerDict.keys()):
+                if name.startswith("agent_"):
+                    loggers_to_reset.append(logging.getLogger(name))
+
+            # Close and clear all handlers
+            for logger in loggers_to_reset:
+                for handler in list(logger.handlers):
+                    handler.close()
+                    logger.removeHandler(handler)
+
+            # Now try to clean up or truncate files
             agents_dir = os.path.join(logs_dir, "agents")
             if os.path.exists(agents_dir):
-                shutil.rmtree(agents_dir)
+                # Instead of deleting, truncate files
+                try:
+                    for filename in os.listdir(agents_dir):
+                        file_path = os.path.join(agents_dir, filename)
+                        if os.path.isfile(file_path):
+                            # Truncate file instead of deleting
+                            with open(file_path, "w") as f:
+                                f.truncate(0)
+                except Exception as e:
+                    print(f"Note: Some log files may not have been cleared: {e}")
+            else:
+                os.makedirs(agents_dir, exist_ok=True)
 
-            # Delete the environment log file if it exists
+            # Truncate environment log file
             env_log_file = os.path.join(logs_dir, "environment.log")
-            if os.path.exists(env_log_file):
-                os.remove(env_log_file)
+            try:
+                if os.path.exists(env_log_file):
+                    with open(env_log_file, "w") as f:
+                        f.truncate(0)
+            except Exception as e:
+                print(f"Note: Environment log file may not have been cleared: {e}")
 
-            # Optional: Log to console that logs were cleared
-            print("Cleared previous log files.")
+            print("Logs reset for new simulation run")
 
     def _initialize_wastes_by_zone(self, zone_type, num_wastes, width, height):
         """Initialize the specified number of wastes in a specific zone type"""
@@ -200,10 +230,14 @@ class Environment(Model):
 
         # Remove any existing handlers to avoid duplicates
         if self.logger.handlers:
-            self.logger.handlers.clear()
+            for handler in list(self.logger.handlers):
+                handler.close()
+                self.logger.removeHandler(handler)
 
-        # File handler for environment
-        file_handler = logging.FileHandler(os.path.join(logs_dir, "environment.log"))
+        # File handler for environment with mode 'w' to overwrite
+        file_handler = logging.FileHandler(
+            os.path.join(logs_dir, "environment.log"), mode="w"
+        )
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
