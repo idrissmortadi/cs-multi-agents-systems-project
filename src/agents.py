@@ -50,13 +50,14 @@ class Drone(Agent):
         self.knowledge = {
             "inventory": [],  # List of Waste objects being carried
             "can_pick": True,
-            "move_east": False,
+            "should_move_east": False,  # Flag to indicate when the drone should move east
             "actions": [],
             "percepts": [],
             "grid_width": self.model.grid.width,
             "grid_height": self.model.grid.height,
             "zone_type": zone_type,
-            "in_drop_zone": False,  # Whether drone is in a drop zone
+            "in_transfer_zone": False,  # Whether drone is in a transfer zone (boundary between zones: x = zone_type * 3 + 2)
+            "in_drop_zone": False,  # Whether done is in last drop zone (las column)
         }
 
     def _setup_logger(self):
@@ -94,23 +95,14 @@ class Drone(Agent):
         If no empty neighbors are available, the drone stays in place.
         Updates the drone's knowledge after moving.
         """
-        # Choose a new position from available empty neighbors or stay in place
-        if self.knowledge["move_east"]:
-            east_positions = [
-                pos for pos in self.percepts["neighbors_empty"] if pos[0] > self.pos[0]
-            ]
-            if east_positions:
-                new_position = east_positions[0]
-            else:
-                new_position = self.pos
-        else:
-            new_position = random.choice(
-                (
-                    self.percepts["neighbors_empty"]
-                    if len(self.percepts["neighbors_empty"]) > 0
-                    else [self.pos]
-                )
+        # Choose a new position randomly from available empty neighbors or stay in place
+        new_position = random.choice(
+            (
+                self.percepts["neighbors_empty"]
+                if len(self.percepts["neighbors_empty"]) > 0
+                else [self.pos]
             )
+        )
 
         # If drone is actually moving to a new position (not staying in place)
         if new_position != self.pos:
@@ -125,8 +117,63 @@ class Drone(Agent):
         self.knowledge["actions"].append(f"moved to {new_position}")
         self.logger.info(f"Moved to position {new_position}")
 
-        # Update knowledge about whether position is in drop zone
-        is_drop_zone = new_position[0] == (self.knowledge["zone_type"] * 3 + 2)
+        # Update knowledge about whether position is in transfer zone (only boundary between zones, not last column)
+        is_transfer_zone = (
+            new_position[0] == (self.knowledge["zone_type"] * 3 + 2)
+            and new_position[0] != self.knowledge["grid_width"] - 1
+        )
+        self.knowledge["in_transfer_zone"] = is_transfer_zone
+        if is_transfer_zone:
+            self.logger.info("Entered transfer zone")
+
+        # Check if the drone is in the last column (drop zone)
+        is_drop_zone = new_position[0] == self.knowledge["grid_width"] - 1
+        self.knowledge["in_drop_zone"] = is_drop_zone
+        if is_drop_zone:
+            self.logger.info("Entered drop zone")
+
+    def move_east(self):
+        """
+        Move the drone to the east (increasing x-coordinate).
+        If no empty positions to the east are available, the drone stays in place.
+        Updates the drone's knowledge after moving.
+        """
+        # Look for empty positions to the east
+        east_positions = [
+            pos for pos in self.percepts["neighbors_empty"] if pos[0] > self.pos[0]
+        ]
+
+        # If there are positions to the east, move to the first one; otherwise, stay in place
+        if east_positions:
+            new_position = east_positions[0]
+        else:
+            new_position = self.pos
+            self.logger.info("No east positions available, staying in place")
+
+        # If drone is actually moving to a new position (not staying in place)
+        if new_position != self.pos:
+            # Reset can_pick when moving to a new position
+            self.knowledge["can_pick"] = True
+            self.logger.info("Reset can_pick flag after moving east")
+
+        # Move the agent to the new position
+        self.model.grid.move_agent(self, new_position)
+
+        # Update knowledge about position
+        self.knowledge["actions"].append(f"moved east to {new_position}")
+        self.logger.info(f"Moved east to position {new_position}")
+
+        # Update knowledge about whether position is in transfer zone (only boundary between zones, not last column)
+        is_transfer_zone = (
+            new_position[0] == (self.knowledge["zone_type"] * 3 + 2)
+            and new_position[0] != self.knowledge["grid_width"] - 1
+        )
+        self.knowledge["in_transfer_zone"] = is_transfer_zone
+        if is_transfer_zone:
+            self.logger.info("Entered transfer zone")
+
+        # Check if the drone is in the last column (drop zone)
+        is_drop_zone = new_position[0] == self.knowledge["grid_width"] - 1
         self.knowledge["in_drop_zone"] = is_drop_zone
         if is_drop_zone:
             self.logger.info("Entered drop zone")
@@ -185,9 +232,7 @@ class Drone(Agent):
         processed_waste = self.knowledge["inventory"].pop(0)
 
         # Create a new waste object with the same type
-        new_waste = Waste(self.model, processed_waste.waste_color)
-        del processed_waste
-        self.model.add_agent(new_waste, self.pos)
+        self.model.grid.place_agent(processed_waste, self.pos)
 
         self.knowledge["actions"].append("dropped waste")
         self.logger.info(f"Dropped waste at {self.pos}")
@@ -196,8 +241,8 @@ class Drone(Agent):
         )
 
         # Don't move east after dropping waste
-        self.knowledge["move_east"] = False
-        self.logger.info("Unset move_east flag after dropping waste")
+        self.knowledge["should_move_east"] = False
+        self.logger.info("Unset should_move_east flag after dropping waste")
 
         return True
 
@@ -223,12 +268,12 @@ class Drone(Agent):
             f"Neighboring wastes: {len(self.percepts['neighbor_wastes'])}"
         )
 
-        # Update drop zone status based on current position
-        # Check if the drone is in a drop zone (x-coordinate equals zone_type * 3 + 2)
-        is_drop_zone = self.pos[0] == (self.knowledge["zone_type"] * 3 + 2)
-        self.knowledge["in_drop_zone"] = is_drop_zone
-        if is_drop_zone:
-            self.logger.info("Currently in drop zone")
+        # Update transfer zone status based on current position
+        # Check if the drone is in a transfer zone (x-coordinate equals zone_type * 3 + 2)
+        is_transfer_zone = self.pos[0] == (self.knowledge["zone_type"] * 3 + 2)
+        self.knowledge["in_transfer_zone"] = is_transfer_zone
+        if is_transfer_zone:
+            self.logger.info("Currently in transfer zone")
 
     def transform_waste(self):
         """
@@ -240,6 +285,8 @@ class Drone(Agent):
         waste_types = [w.waste_color for w in self.knowledge["inventory"]]
 
         # Clear the inventory
+        for waste in self.knowledge["inventory"]:
+            del waste
         self.knowledge["inventory"] = []
 
         # Create one processed waste item and add it to inventory
@@ -247,8 +294,8 @@ class Drone(Agent):
         self.knowledge["inventory"].append(processed_waste)
 
         # Move east after transforming
-        self.knowledge["move_east"] = True
-        self.logger.info("Set move_east flag after transforming")
+        self.knowledge["should_move_east"] = True
+        self.logger.info("Set should_move_east flag after transforming")
 
         # Log the transformation action
         self.knowledge["actions"].append("transformed waste")
@@ -261,49 +308,82 @@ class Drone(Agent):
         Decide which action to take based on the drone's current knowledge and state.
 
         Returns:
-            str: The action to take ("transform_waste", "drop_waste", "pick_waste", or "move")
+            str: The action to take ("transform_waste", "drop_waste", "pick_waste", "move_east", or "move")
         """
         self.logger.info("============DELEBIRATION=============")
         self.logger.info("Deliberating on next action")
         self.logger.info(f"Current inventory: {self.knowledge['inventory']}")
         self.logger.info(f"Can pick waste: {self.knowledge['can_pick']}")
-        self.logger.info(f"Drop zone status: {self.knowledge['in_drop_zone']}")
+        self.logger.info(f"Should move east: {self.knowledge['should_move_east']}")
+        self.logger.info(f"transfer zone status: {self.knowledge['in_transfer_zone']}")
+        self.logger.info(f"drop zone status: {self.knowledge['in_drop_zone']}")
         self.logger.info(f"Zone type: {self.knowledge['zone_type']}")
         self.logger.info(f"Position: {self.pos}")
         self.logger.info("=====================================")
 
-        # Priority 0: Transform waste if carrying maximum capacity
-        if len(self.knowledge["inventory"]) == 2:
+        # Priority 0: Transform if we are green robot or yellow robot and at max capacity
+        if len(self.knowledge["inventory"]) == 2 and self.knowledge["zone_type"] < 2:
+            self.logger.info("At max capacity")
             self.logger.info("Decision: Transform waste (at max capacity)")
             return "transform_waste"
         elif len(self.knowledge["inventory"]) < 2 and self.knowledge["inventory"]:
             self.logger.info("Not at max capacity")
         elif not self.knowledge["inventory"]:
             self.logger.info("Inventory is empty")
+        # ==========================================================================
 
-        # Priority 1: Drop waste if in drop zone and carrying processed waste
-        if self.knowledge["in_drop_zone"] and self.knowledge["inventory"]:
-            self.logger.info("In drop zone with waste")
+        # Priority 1.1: Drop waste if in transfer zone and carrying processed waste
+        if self.knowledge["in_transfer_zone"] and self.knowledge["inventory"]:
+            self.logger.info("In transfer zone with waste")
+
             # Check if waste is of the correct processed type
             if any(
                 waste.waste_color == (self.knowledge["zone_type"] + 1)
                 for waste in self.knowledge["inventory"]
             ):
-                self.logger.info("Decision: Drop waste (in correct drop zone)")
+                self.logger.info("Decision: Drop waste (in correct transfer zone)")
                 return "drop_waste"
             else:
                 self.logger.info("Cannot drop waste")
 
+        # Priority 1.2: if red drone and in drop zone, drop waste
+        if (
+            self.knowledge["in_drop_zone"]
+            and self.knowledge["inventory"]
+            and self.knowledge["zone_type"] == 2
+        ):
+            self.logger.info("In drop zone with waste")
+
+            # Check if waste is of the correct processed type
+            if any(
+                waste.waste_color == self.knowledge["zone_type"]
+                for waste in self.knowledge["inventory"]
+            ):
+                self.logger.info("Decision: Drop waste (in drop zone)")
+                return "drop_waste"
+            else:
+                self.logger.info("Cannot drop waste")
+        # ==========================================================================
+
+        # Priority 1: Move east after transforming waste or if we should move east
+        if self.knowledge["should_move_east"] and self.knowledge["inventory"]:
+            self.logger.info("Decision: Move east (after transformation)")
+            return "move_east"
+        # ============================================================================
+
         # Priority 2: Pick waste if at same position as compatible waste and has capacity
         compatible_wastes = []
+        inventory_types = [w.waste_color for w in self.knowledge["inventory"]]
+        self.logger.info(f"Inventory types: {inventory_types}")
         for waste_id, waste_pos in self.percepts["neighbor_wastes"]:
             waste = self.model.get_agent_by_id(waste_id)
-            # Check if waste type is compatible with current inventory
-            inventory_types = [w.waste_color for w in self.knowledge["inventory"]]
 
+            # Check if waste type is compatible with current inventory
             if (
-                not inventory_types or waste.waste_color in inventory_types
-            ) and waste.waste_color == self.knowledge["zone_type"]:
+                (not inventory_types or waste.waste_color in inventory_types)
+                and waste.waste_color == self.knowledge["zone_type"]
+                and waste_pos[0] != self.knowledge["grid_width"] - 1
+            ):
                 compatible_wastes.append(waste_id)
 
         if compatible_wastes:
@@ -318,6 +398,16 @@ class Drone(Agent):
             return "pick_waste"
         elif not self.knowledge["can_pick"]:
             self.logger.info("Cannot pick waste")
+        # ==========================================================================
+
+        # If red drone and have any waste in inventory, move east
+        if (
+            self.knowledge["zone_type"] == 2
+            and self.knowledge["inventory"]
+            and not self.knowledge["should_move_east"]
+        ):
+            self.logger.info("Decision: Move east (red drone with waste)")
+            return "move_east"
 
         # Default action: Move randomly
         self.logger.info("Decision: Move (default action)")
