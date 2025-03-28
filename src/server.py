@@ -1,8 +1,5 @@
 import mesa
-from mesa.visualization import (
-    SolaraViz,
-    make_space_component,
-)
+from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
 from agents import Drone
 from model import Environment
@@ -13,55 +10,148 @@ print(f"Mesa version: {mesa.__version__}")
 
 def agent_portrayal(agent: mesa.Agent):
     if isinstance(agent, Waste):
+        WASTES_COLOR_MAP = {
+            0: "#00FF00",
+            1: "yellow",
+            2: "red",
+        }
+        WASTES_MARKER_MAP = {
+            0: "*",
+            1: "*",
+            2: "*",
+        }
+
         portrayal = {
-            "color": "black",
-            "marker": "D",
-            "zorder": 100,
-            "size": 70,
+            "marker": WASTES_MARKER_MAP.get(agent.waste_color, "o"),
+            "color": WASTES_COLOR_MAP.get(agent.waste_color, "black"),
+            "zorder": 101,
+            # "size": 100,
         }
     elif isinstance(agent, Drone):
+        AGENT_COLOR_MAP = {
+            0: "#00FF00",
+            1: "#FFFF00",
+            2: "#FF0000",
+        }
         portrayal = {
-            "color": "purple",
-            "zorder": 101,
+            "color": AGENT_COLOR_MAP.get(agent.zone_type, "purple"),
+            "marker": "o",
+            "zorder": 100,
+            # "size": 500,
         }
     elif isinstance(agent, Zone):
-        return {
-            "marker": "s",
-            "color": COLORS_MAP[agent.zone_type],
-            "zorder": 99,
-            "size": 1300,
-        }
+        if agent.is_drop_zone:
+            portrayal = {
+                "marker": "s",
+                "color": "red",
+                "zorder": 99,
+                # "size": 1000,
+            }
+        else:
+            if (
+                agent.pos[0] % (agent.model.grid.width // 3)
+                == agent.model.grid.width // 3 - 1
+                and agent.pos[0] < agent.model.grid.width // 3 * 2
+            ):
+                portrayal = {
+                    "marker": "s",
+                    "color": COLORS_MAP[agent.zone_type],
+                    "zorder": 99,
+                    # "size": 1000,
+                }
+            else:
+                portrayal = {
+                    "marker": "s",
+                    "color": "white",
+                    "zorder": 99,
+                    # "size": 1000,
+                }
     return portrayal
 
 
 model_params = {
-    "n": {
+    "green_agents": {
         "type": "SliderInt",
-        "value": 1,
-        "label": "Number of agents:",
+        "value": 3,
+        "label": "Number of green agents",
         "min": 1,
         "max": 100,
         "step": 1,
     },
-    "num_wastes": {
+    "yellow_agents": {
         "type": "SliderInt",
-        "value": 1,
-        "label": "Number of agents:",
-        "min": 1,
+        "value": 3,
+        "label": "Number of yellow agents",
+        "min": 0,
         "max": 100,
         "step": 1,
     },
-    "width": 10,
-    "height": 10,
+    "red_agents": {
+        "type": "SliderInt",
+        "value": 3,
+        "label": "Number of red agents",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+    },
+    "green_wastes": {
+        "type": "SliderInt",
+        "value": 8,
+        "label": "Number of green wastes",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+    },
+    "yellow_wastes": {
+        "type": "SliderInt",
+        "value": 3,
+        "label": "Number of yellow wastes",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+    },
+    "red_wastes": {
+        "type": "SliderInt",
+        "value": 2,
+        "label": "Number of red wastes",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+    },
+    "width": {
+        "type": "SliderInt",
+        "value": 10,
+        "label": "Grid width:",
+        "min": 10,
+        "max": 100,
+        "step": 1,
+    },
+    "height": {
+        "type": "SliderInt",
+        "value": 10,
+        "label": "Grid height:",
+        "min": 10,
+        "max": 100,
+        "step": 1,
+    },
 }
-money_model = Environment(n=10, num_wastes=10, width=10, height=10)
+model = Environment(
+    green_agents=model_params["green_agents"]["value"],
+    yellow_agents=model_params["yellow_agents"]["value"],
+    red_agents=model_params["red_agents"]["value"],
+    green_wastes=model_params["green_wastes"]["value"],
+    yellow_wastes=model_params["yellow_wastes"]["value"],
+    red_wastes=model_params["red_wastes"]["value"],
+    width=model_params["width"]["value"],
+    height=model_params["height"]["value"],
+)
 
 SpaceGraph = make_space_component(agent_portrayal)
-# GiniEthnicityPlot = make_plot_component(["Gini_Mixed", "Gini_Green", "Gini_Blue"])
+WastesPlot = make_plot_component(["green_wastes", "yellow_wastes", "red_wastes"])
 
 page = SolaraViz(
-    money_model,
-    components=[SpaceGraph],
+    model,
+    components=[SpaceGraph, WastesPlot],
     model_params=model_params,
     name="Simple",
 )
