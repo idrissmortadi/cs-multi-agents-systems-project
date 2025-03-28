@@ -117,21 +117,6 @@ class Drone(Agent):
         self.knowledge["actions"].append(f"moved to {new_position}")
         self.logger.info(f"Moved to position {new_position}")
 
-        # Update knowledge about whether position is in transfer zone (only boundary between zones, not last column)
-        is_transfer_zone = (
-            new_position[0] == (self.knowledge["zone_type"] * 3 + 2)
-            and new_position[0] != self.knowledge["grid_width"] - 1
-        )
-        self.knowledge["in_transfer_zone"] = is_transfer_zone
-        if is_transfer_zone:
-            self.logger.info("Entered transfer zone")
-
-        # Check if the drone is in the last column (drop zone)
-        is_drop_zone = new_position[0] == self.knowledge["grid_width"] - 1
-        self.knowledge["in_drop_zone"] = is_drop_zone
-        if is_drop_zone:
-            self.logger.info("Entered drop zone")
-
     def move_east(self):
         """
         Move the drone to the east (increasing x-coordinate).
@@ -162,21 +147,6 @@ class Drone(Agent):
         # Update knowledge about position
         self.knowledge["actions"].append(f"moved east to {new_position}")
         self.logger.info(f"Moved east to position {new_position}")
-
-        # Update knowledge about whether position is in transfer zone (only boundary between zones, not last column)
-        is_transfer_zone = (
-            new_position[0] == (self.knowledge["zone_type"] * 3 + 2)
-            and new_position[0] != self.knowledge["grid_width"] - 1
-        )
-        self.knowledge["in_transfer_zone"] = is_transfer_zone
-        if is_transfer_zone:
-            self.logger.info("Entered transfer zone")
-
-        # Check if the drone is in the last column (drop zone)
-        is_drop_zone = new_position[0] == self.knowledge["grid_width"] - 1
-        self.knowledge["in_drop_zone"] = is_drop_zone
-        if is_drop_zone:
-            self.logger.info("Entered drop zone")
 
     def pick_waste(self):
         """
@@ -269,11 +239,22 @@ class Drone(Agent):
         )
 
         # Update transfer zone status based on current position
-        # Check if the drone is in a transfer zone (x-coordinate equals zone_type * 3 + 2)
-        is_transfer_zone = self.pos[0] == (self.knowledge["zone_type"] * 3 + 2)
+        # Check if the drone is in a transfer zone (boundary between zones)
+        is_transfer_zone = (
+            self.pos[0]
+            == (self.knowledge["zone_type"] + 1) * (self.knowledge["grid_width"] // 3)
+            - 1
+            and self.pos[0] != self.knowledge["grid_width"] - 1
+        )
+
         self.knowledge["in_transfer_zone"] = is_transfer_zone
         if is_transfer_zone:
             self.logger.info("Currently in transfer zone")
+
+        is_drop_zone = self.pos[0] == self.knowledge["grid_width"] - 1
+        self.knowledge["in_drop_zone"] = is_drop_zone
+        if is_drop_zone:
+            self.logger.info("Currently in drop zone")
 
     def transform_waste(self):
         """
