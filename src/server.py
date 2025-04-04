@@ -5,12 +5,15 @@ from mesa.visualization import SolaraViz, make_plot_component, make_space_compon
 from agents import Drone
 from model import Environment
 from objects import COLORS_MAP, Waste, Zone
+from strategies import RandomWalk
 from tracker import Tracker
 
 print(f"Mesa version: {mesa.__version__}")
 sns.set_theme(style="whitegrid")
 
 tracker = Tracker("experiment_live")
+
+strategy = RandomWalk
 
 
 def agent_portrayal(agent: mesa.Agent):
@@ -140,9 +143,11 @@ model_params = {
         "step": 1,
     },
     "tracker": tracker,
+    "drones_strategy": RandomWalk,
 }
 
 model = Environment(
+    drones_strategy=strategy,
     green_agents=model_params["green_agents"]["value"],
     yellow_agents=model_params["yellow_agents"]["value"],
     red_agents=model_params["red_agents"]["value"],
