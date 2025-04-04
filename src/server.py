@@ -155,8 +155,46 @@ model = Environment(
 )
 
 SpaceGraph = make_space_component(agent_portrayal)
+
+
+def wastes_postprocess_ax(ax):
+    # Set the x-axis ticks to be the waste types
+    # Set the y-axis ticks to be the waste counts
+
+    # Set the title and labels
+    ax.set_title("Number of Wastes in each Zone")
+    ax.set_xlabel("Step")
+    ax.set_ylabel("Count")
+
+    # Line colors for each waste type
+    line_colors = {
+        "green_wastes": "#00FF00",
+        "yellow_wastes": "#FFFF00",
+        "red_wastes": "#FF0000",
+    }
+
+    # Set the colors for each line
+    for line in ax.get_lines():
+        label = line.get_label()
+        if label in line_colors:
+            color = line_colors[label]
+            line.set_color(color)
+
+    # Set the legend
+    ax.legend(
+        loc="upper right",
+        title="Waste Types",
+        title_fontsize="13",
+        fontsize="10",
+        frameon=False,
+    )
+
+    return ax
+
+
 WastesPlot = make_plot_component(
     measure=["green_wastes", "yellow_wastes", "red_wastes"],
+    post_process=wastes_postprocess_ax,
 )
 
 wastes_in_drop_zone = make_plot_component(["wastes_in_drop_zone"])
