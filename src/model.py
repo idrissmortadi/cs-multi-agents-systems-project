@@ -1,7 +1,6 @@
 import logging
 import os
-import shutil
-from typing import Optional
+from typing import Literal, Optional
 
 from mesa import Model
 from mesa.datacollection import DataCollector
@@ -9,12 +8,14 @@ from mesa.space import MultiGrid
 
 from agents import Drone
 from objects import Waste, Zone
+from strategies import STRATEGY_MAPPING
 from tracker import Tracker
 
 
 class Environment(Model):
     def __init__(
         self,
+        drones_strategy: Literal["Random Walk"],
         green_agents=1,
         yellow_agents=0,
         red_agents=0,
@@ -30,6 +31,10 @@ class Environment(Model):
 
         # Add tracker
         self.tracker = tracker
+
+        # Get picked strategy
+        if drones_strategy == "Random Walk":
+            self.drones_strategy = STRATEGY_MAPPING[drones_strategy]
 
         # Clear old log files before setting up new ones
         self._clear_logs()
@@ -240,7 +245,7 @@ class Environment(Model):
         for _ in range(num_drones):
             if zone_positions:
                 pos = self.random.choice(zone_positions)
-                a = Drone(self, zone_type)
+                a = Drone(self, zone_type, self.drones_strategy)
                 self.grid.place_agent(a, pos)
                 self.logger.info(
                     f"Placed drone {a.unique_id} at position {pos} in zone type {zone_type}"

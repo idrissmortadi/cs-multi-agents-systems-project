@@ -5,6 +5,7 @@ from functools import wraps
 
 from communication import CommunicatingAgent
 from objects import Waste
+from strategies import BaseStrategy, RandomWalk
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class Drone(CommunicatingAgent):
     Each drone is assigned to a specific zone type.
     """
 
-    def __init__(self, model, zone_type):
+    def __init__(self, model, zone_type, strategy_cls: BaseStrategy = RandomWalk):
         """
         Initialize a drone agent.
 
@@ -57,6 +58,8 @@ class Drone(CommunicatingAgent):
         # Setup individual agent logger
         self._setup_logger()
         self.zone_type = zone_type
+
+        self.strategy = strategy_cls(self)
 
         self.logger.info(
             f"Initializing drone {self.unique_id} with zone type {zone_type}"
@@ -311,108 +314,7 @@ class Drone(CommunicatingAgent):
         Returns:
             str: The action to take ("transform_waste", "drop_waste", "pick_waste", "move_east", or "move")
         """
-        self.logger.info("============DELEBIRATION=============")
-        self.logger.info("Deliberating on next action")
-        self.logger.info(f"Current inventory: {self.knowledge['inventory']}")
-        self.logger.info(f"Can pick waste: {self.knowledge['can_pick']}")
-        self.logger.info(f"Should move east: {self.knowledge['should_move_east']}")
-        self.logger.info(f"transfer zone status: {self.knowledge['in_transfer_zone']}")
-        self.logger.info(f"drop zone status: {self.knowledge['in_drop_zone']}")
-        self.logger.info(f"Zone type: {self.knowledge['zone_type']}")
-        self.logger.info(f"Position: {self.pos}")
-        self.logger.info("=====================================")
-
-        # Priority 0: Transform if we are green robot or yellow robot and at max capacity
-        if len(self.knowledge["inventory"]) == 2 and self.knowledge["zone_type"] < 2:
-            self.logger.info("At max capacity")
-            self.logger.info("Decision: Transform waste (at max capacity)")
-            return "transform_waste"
-        elif len(self.knowledge["inventory"]) < 2 and self.knowledge["inventory"]:
-            self.logger.info("Not at max capacity")
-        elif not self.knowledge["inventory"]:
-            self.logger.info("Inventory is empty")
-        # ==========================================================================
-
-        # Priority 1.1: Drop waste if in transfer zone and carrying processed waste
-        if self.knowledge["in_transfer_zone"] and self.knowledge["inventory"]:
-            self.logger.info("In transfer zone with waste")
-
-            # Check if waste is of the correct processed type
-            if any(
-                waste.waste_color == (self.knowledge["zone_type"] + 1)
-                for waste in self.knowledge["inventory"]
-            ):
-                self.logger.info("Decision: Drop waste (in correct transfer zone)")
-                return "drop_waste"
-            else:
-                self.logger.info("Cannot drop waste")
-
-        # Priority 1.2: if red drone and in drop zone, drop waste
-        if (
-            self.knowledge["in_drop_zone"]
-            and self.knowledge["inventory"]
-            and self.knowledge["zone_type"] == 2
-        ):
-            self.logger.info("In drop zone with waste")
-
-            # Check if waste is of the correct processed type
-            if any(
-                waste.waste_color == self.knowledge["zone_type"]
-                for waste in self.knowledge["inventory"]
-            ):
-                self.logger.info("Decision: Drop waste (in drop zone)")
-                return "drop_waste"
-            else:
-                self.logger.info("Cannot drop waste")
-        # ==========================================================================
-
-        # Priority 1: Move east after transforming waste or if we should move east
-        if self.knowledge["should_move_east"] and self.knowledge["inventory"]:
-            self.logger.info("Decision: Move east (after transformation)")
-            return "move_east"
-        # ============================================================================
-
-        # Priority 2: Pick waste if at same position as compatible waste and has capacity
-        compatible_wastes = []
-        inventory_types = [w.waste_color for w in self.knowledge["inventory"]]
-        self.logger.info(f"Inventory types: {inventory_types}")
-        for waste_id, waste_pos in self.percepts["neighbor_wastes"]:
-            waste = self.model.get_agent_by_id(waste_id)
-
-            # Check if waste type is compatible with current inventory
-            if (
-                (not inventory_types or waste.waste_color in inventory_types)
-                and waste.waste_color == self.knowledge["zone_type"]
-                and waste_pos[0] != self.knowledge["grid_width"] - 1
-            ):
-                compatible_wastes.append(waste_id)
-
-        if compatible_wastes:
-            self.logger.info(f"Found {len(compatible_wastes)} compatible wastes nearby")
-
-        if (
-            compatible_wastes
-            and len(self.knowledge["inventory"]) < 2
-            and self.knowledge["can_pick"]
-        ):
-            self.logger.info("Decision: Pick waste")
-            return "pick_waste"
-        elif not self.knowledge["can_pick"]:
-            self.logger.info("Cannot pick waste")
-        # ==========================================================================
-
-        # If red drone and have any waste in inventory, move east
-        if (
-            self.knowledge["zone_type"] == 2
-            and self.knowledge["inventory"]
-            and not self.knowledge["should_move_east"]
-        ):
-            self.logger.info("Decision: Move east (red drone with waste)")
-            return "move_east"
-
-        # Default action: Move randomly
-        self.logger.info("Decision: Move (default action)")
-        return "move"
+        return self.strategy.execute()
 
     def step_agent(self):
         """
