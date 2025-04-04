@@ -45,7 +45,7 @@ class Drone(CommunicatingAgent):
     Each drone is assigned to a specific zone type.
     """
 
-    def __init__(self, model, zone_type, strategy: BaseStrategy = RandomWalk):
+    def __init__(self, model, zone_type, strategy_cls: BaseStrategy = RandomWalk):
         """
         Initialize a drone agent.
 
@@ -59,7 +59,7 @@ class Drone(CommunicatingAgent):
         self._setup_logger()
         self.zone_type = zone_type
 
-        self.strategy = strategy(self)
+        self.strategy = strategy_cls(self)
 
         self.logger.info(
             f"Initializing drone {self.unique_id} with zone type {zone_type}"
