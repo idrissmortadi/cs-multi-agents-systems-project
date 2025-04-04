@@ -11,7 +11,7 @@ class RandomWalk(BaseStrategy):
 
     def __init__(self, drone):
         """
-        Initialize the BaselineStrategy.
+        Initialize the strategy.
 
         :param drone: The drone agent using this strategy.
         """
