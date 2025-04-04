@@ -1,11 +1,16 @@
 import mesa
+import seaborn as sns
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
 from agents import Drone
 from model import Environment
 from objects import COLORS_MAP, Waste, Zone
+from tracker import Tracker
 
 print(f"Mesa version: {mesa.__version__}")
+sns.set_theme(style="whitegrid")
+
+tracker = Tracker("experiment_live")
 
 
 def agent_portrayal(agent: mesa.Agent):
@@ -134,7 +139,9 @@ model_params = {
         "max": 100,
         "step": 1,
     },
+    "tracker": tracker,
 }
+
 model = Environment(
     green_agents=model_params["green_agents"]["value"],
     yellow_agents=model_params["yellow_agents"]["value"],
@@ -144,14 +151,38 @@ model = Environment(
     red_wastes=model_params["red_wastes"]["value"],
     width=model_params["width"]["value"],
     height=model_params["height"]["value"],
+    tracker=tracker,
 )
 
 SpaceGraph = make_space_component(agent_portrayal)
-WastesPlot = make_plot_component(["green_wastes", "yellow_wastes", "red_wastes"])
+WastesPlot = make_plot_component(
+    measure=["green_wastes", "yellow_wastes", "red_wastes"],
+)
 
+wastes_in_drop_zone = make_plot_component(["wastes_in_drop_zone"])
+
+# Add new plots for metrics
+ProcessingTimePlot = make_plot_component(["avg_processing_time"])
+InventoryUtilizationPlot = make_plot_component(["inventory_utilization"])
+ThroughputPlot = make_plot_component(["avg_throughput"])
+# ZoneClearancePlot = make_plot_component(
+#     ["zone_0_clearance_rate", "zone_1_clearance_rate", "zone_2_clearance_rate"]
+# )
+agents_behaviour = make_plot_component(["avg_distance_per_agent"])
+
+# Update the SolaraViz to include the new plots
 page = SolaraViz(
     model,
-    components=[SpaceGraph, WastesPlot],
+    components=[
+        SpaceGraph,
+        WastesPlot,
+        wastes_in_drop_zone,
+        ProcessingTimePlot,
+        InventoryUtilizationPlot,
+        ThroughputPlot,
+        agents_behaviour,
+        # ZoneClearancePlot,
+    ],
     model_params=model_params,
     name="Simple",
 )
