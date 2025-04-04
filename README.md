@@ -2,6 +2,12 @@
 
 A project focused on designing, simulating, and analyzing multi-agent systems, implementing coordination, communication, and decision-making strategies.
 
+## Running the code
+
+```bash
+solara run src/server.py
+```
+
 ## Multi-Agent Waste Processing System
 
 ### Agent Overview
