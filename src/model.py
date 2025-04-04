@@ -22,8 +22,12 @@ class Environment(Model):
         width=9,
         height=9,
         seed=None,
+        tracker=None,  # Add tracker parameter
     ):
         super().__init__(seed=seed)
+
+        # Add tracker
+        self.tracker = tracker
 
         # Clear old log files before setting up new ones
         self._clear_logs()
@@ -212,6 +216,22 @@ class Environment(Model):
         self.datacollector.collect(self)
         # self.logger.info("Starting a new step in the environment")
         self.agents.shuffle_do("step_agent")
+
+        # Track wastes in red zone after each step
+        if self.tracker:
+            red_zone_wastes = len(
+                [
+                    agent
+                    for agent in self.grid.agents
+                    if isinstance(agent, Waste)
+                    and agent.waste_color == 2
+                    and agent.pos[0]
+                    == self.grid.width - 1  # Only count wastes in drop zone
+                ]
+            )
+            self.tracker.log_result(
+                {"step": self.steps, "red_zone_wastes": red_zone_wastes}
+            )
 
     def _get_zone(self, pos):
         cellmates = self.grid.get_cell_list_contents(pos)
