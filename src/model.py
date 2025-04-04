@@ -1,6 +1,5 @@
 import logging
 import os
-import shutil
 from typing import Optional
 
 from mesa import Model
