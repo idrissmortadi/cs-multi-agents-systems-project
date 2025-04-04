@@ -26,7 +26,7 @@ class RandomWalk(BaseStrategy):
         """
 
         # Log deliberation information
-        self.drone.logger.info("============DELEBIRATION=============")
+        self.drone.logger.info("============DELIBERATION=============")
         self.drone.logger.info("Deliberating on next action")
         self.drone.logger.info(
             f"Current inventory: {self.drone.knowledge['inventory']}"
