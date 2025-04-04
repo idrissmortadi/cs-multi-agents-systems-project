@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+from functools import wraps
 
 from communication import CommunicatingAgent
 from objects import Waste
@@ -14,6 +15,27 @@ if not logger.handlers:
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+
+def cleanup_logger(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        # Get logger name
+        logger_name = f"agent_{self.unique_id}"
+
+        # Clean up existing logger if it exists
+        if logger_name in logging.Logger.manager.loggerDict:
+            existing_logger = logging.getLogger(logger_name)
+            # Close and remove all handlers
+            for handler in list(existing_logger.handlers):
+                handler.close()
+                existing_logger.removeHandler(handler)
+            # Remove logger from manager
+            del logging.Logger.manager.loggerDict[logger_name]
+
+        return func(self, *args, **kwargs)
+
+    return wrapper
 
 
 class Drone(CommunicatingAgent):
@@ -59,31 +81,21 @@ class Drone(CommunicatingAgent):
             "in_drop_zone": False,  # Whether done is in last drop zone (las column)
         }
 
+    @cleanup_logger
     def _setup_logger(self):
         """Set up individual logging for this drone"""
-        # Get path to logs directory
         logs_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs"
         )
         agents_dir = os.path.join(logs_dir, "agents")
+        os.makedirs(agents_dir, exist_ok=True)
 
-        # Create dirs if they don't exist
-        if not os.path.exists(logs_dir):
-            os.makedirs(logs_dir)
-        if not os.path.exists(agents_dir):
-            os.makedirs(agents_dir)
-
-        # Set up logger for this specific drone
         self.logger = logging.getLogger(f"agent_{self.unique_id}")
         self.logger.setLevel(logging.INFO)
 
-        # Remove any existing handlers to avoid duplicates
-        if self.logger.handlers:
-            self.logger.handlers.clear()
-
-        # Add file handler
+        # Create new file handler
         log_file = os.path.join(agents_dir, f"agent_{self.unique_id}.log")
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(log_file, mode="w")
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
