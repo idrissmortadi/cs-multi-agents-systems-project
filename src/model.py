@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+from typing import Optional
 
 from mesa import Model
 from mesa.datacollection import DataCollector
@@ -8,6 +9,7 @@ from mesa.space import MultiGrid
 
 from agents import Drone
 from objects import Waste, Zone
+from tracker import Tracker
 
 
 class Environment(Model):
@@ -22,7 +24,7 @@ class Environment(Model):
         width=9,
         height=9,
         seed=None,
-        tracker=None,  # Add tracker parameter
+        tracker: Optional[Tracker] = None,
     ):
         super().__init__(seed=seed)
 
@@ -59,6 +61,37 @@ class Environment(Model):
                         if isinstance(a, Waste) and a.waste_color == 2
                     ]
                 ),
+                "wastes_in_drop_zone": lambda m: len(
+                    [
+                        a
+                        for a in m.grid.agents
+                        if isinstance(a, Waste)
+                        and a.waste_color == 2
+                        and m._get_zone(a.pos).is_drop_zone
+                    ]
+                ),
+                "avg_processing_time": lambda m: m.tracker.metrics[
+                    "processing_efficiency"
+                ]["avg_processing_time"]
+                if m.tracker and "processing_efficiency" in m.tracker.metrics
+                else 0,
+                "avg_throughput": lambda m: m.tracker.metrics["system_metrics"][
+                    "avg_throughput"
+                ]
+                if m.tracker and "system_metrics" in m.tracker.metrics
+                else 0,
+                "inventory_utilization": lambda m: sum(
+                    [
+                        len(a.knowledge["inventory"])
+                        for a in m.grid.agents
+                        if isinstance(a, Drone)
+                    ]
+                ),
+                "avg_distance_per_agent": lambda m: m.tracker.metrics["agent_behavior"][
+                    "avg_distance_per_agent"
+                ]
+                if m.tracker
+                else 0,
             },
             agent_reporters={},
         )
@@ -299,7 +332,9 @@ class Environment(Model):
                     state["last_position"] = waste.pos
 
     def step(self):
+        self.tracker.calculate_metrics()
         self.datacollector.collect(self)
+
         # self.logger.info("Starting a new step in the environment")
         self.agents.shuffle_do("step_agent")
 
