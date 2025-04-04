@@ -43,7 +43,7 @@ def agent_portrayal(agent: mesa.Agent):
         if agent.is_drop_zone:
             portrayal = {
                 "marker": "s",
-                "color": "red",
+                "color": "#990000",
                 "zorder": 99,
                 # "size": 1000,
             }

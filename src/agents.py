@@ -2,8 +2,7 @@ import logging
 import os
 import random
 
-from mesa import Agent
-
+from communication import CommunicatingAgent
 from objects import Waste
 
 # Set up module-level logger
@@ -17,7 +16,7 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-class Drone(Agent):
+class Drone(CommunicatingAgent):
     """
     A drone agent that can move around the grid, pick up, transform, and drop waste.
     Each drone is assigned to a specific zone type.
@@ -31,7 +30,7 @@ class Drone(Agent):
             model: The model instance the drone is part of
             zone_type: The type of zone the drone is assigned to
         """
-        super().__init__(model)
+        super().__init__(model, name=f"Drone_{id(self)}_{zone_type}")
 
         # Setup individual agent logger
         self._setup_logger()
