@@ -13,7 +13,7 @@ sns.set_theme(style="whitegrid")
 
 tracker = Tracker("experiment_live")
 
-strategy = RandomWalk
+random_walk_strategy = RandomWalk
 
 
 def agent_portrayal(agent: mesa.Agent):
@@ -143,11 +143,11 @@ model_params = {
         "step": 1,
     },
     "tracker": tracker,
-    "drones_strategy": RandomWalk,
+    "drones_strategy": "Random Walk",
 }
 
 model = Environment(
-    drones_strategy=strategy,
+    drones_strategy=model_params["drones_strategy"],
     green_agents=model_params["green_agents"]["value"],
     yellow_agents=model_params["yellow_agents"]["value"],
     red_agents=model_params["red_agents"]["value"],
@@ -163,7 +163,6 @@ SpaceGraph = make_space_component(agent_portrayal)
 WastesPlot = make_plot_component(
     measure=["green_wastes", "yellow_wastes", "red_wastes"],
 )
-
 wastes_in_drop_zone = make_plot_component(["wastes_in_drop_zone"])
 
 # Add new plots for metrics

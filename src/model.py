@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional
+from typing import Literal, Optional
 
 from mesa import Model
 from mesa.datacollection import DataCollector
@@ -8,14 +8,14 @@ from mesa.space import MultiGrid
 
 from agents import Drone
 from objects import Waste, Zone
-from strategies import BaseStrategy
+from strategies import STRATEGY_MAPPING
 from tracker import Tracker
 
 
 class Environment(Model):
     def __init__(
         self,
-        drones_strategy: Optional[BaseStrategy],
+        drones_strategy: Literal["Random Walk"],
         green_agents=1,
         yellow_agents=0,
         red_agents=0,
@@ -31,6 +31,10 @@ class Environment(Model):
 
         # Add tracker
         self.tracker = tracker
+
+        # Get picked strategy
+        if drones_strategy == "Random Walk":
+            self.drones_strategy = STRATEGY_MAPPING[drones_strategy]
 
         # Clear old log files before setting up new ones
         self._clear_logs()
@@ -148,15 +152,9 @@ class Environment(Model):
         self._initialize_wastes_by_zone(2, red_wastes, width, height)  # Red zone
 
         # Initialize agents in each zone type
-        self._initialize_drones_by_zone(
-            0, green_agents, width, height, drones_strategy
-        )  # Green zone
-        self._initialize_drones_by_zone(
-            1, yellow_agents, width, height, drones_strategy
-        )  # Yellow zone
-        self._initialize_drones_by_zone(
-            2, red_agents, width, height, drones_strategy
-        )  # Red zone
+        self._initialize_drones_by_zone(0, green_agents, width, height)  # Green zone
+        self._initialize_drones_by_zone(1, yellow_agents, width, height)  # Yellow zone
+        self._initialize_drones_by_zone(2, red_agents, width, height)  # Red zone
 
     def _clear_logs(self):
         """Clear all existing log files before starting a new simulation"""
@@ -231,9 +229,7 @@ class Environment(Model):
                         "last_position": pos,
                     }
 
-    def _initialize_drones_by_zone(
-        self, zone_type, num_drones, width, height, drones_strategy
-    ):
+    def _initialize_drones_by_zone(self, zone_type, num_drones, width, height):
         """Initialize the specified number of drones in a specific zone type"""
         zone_positions = []
 
@@ -249,7 +245,7 @@ class Environment(Model):
         for _ in range(num_drones):
             if zone_positions:
                 pos = self.random.choice(zone_positions)
-                a = Drone(self, zone_type, drones_strategy)
+                a = Drone(self, zone_type, self.drones_strategy)
                 self.grid.place_agent(a, pos)
                 self.logger.info(
                     f"Placed drone {a.unique_id} at position {pos} in zone type {zone_type}"
