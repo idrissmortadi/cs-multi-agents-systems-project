@@ -5,7 +5,7 @@ from functools import wraps
 
 from communication import CommunicatingAgent
 from objects import Waste
-from strategies import BaselineStrategy
+from strategies import BaseStrategy, RandomWalk
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class Drone(CommunicatingAgent):
     Each drone is assigned to a specific zone type.
     """
 
-    def __init__(self, model, zone_type):
+    def __init__(self, model, zone_type, strategy: BaseStrategy = RandomWalk):
         """
         Initialize a drone agent.
 
@@ -59,7 +59,7 @@ class Drone(CommunicatingAgent):
         self._setup_logger()
         self.zone_type = zone_type
 
-        self.strategy = BaselineStrategy(self)
+        self.strategy = strategy(self)
 
         self.logger.info(
             f"Initializing drone {self.unique_id} with zone type {zone_type}"
@@ -314,7 +314,7 @@ class Drone(CommunicatingAgent):
         Returns:
             str: The action to take ("transform_waste", "drop_waste", "pick_waste", "move_east", or "move")
         """
-        return self.strategy.deliberate()
+        return self.strategy.execute()
 
     def step_agent(self):
         """
