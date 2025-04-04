@@ -4,6 +4,15 @@ A project focused on designing, simulating, and analyzing multi-agent systems, i
 
 ## Running the code
 
+### Install the required packages
+
+```bash
+conda env create -f environment.yml
+conda activate SMA
+```
+
+### Run the simulation
+
 ```bash
 solara run src/server.py
 ```
