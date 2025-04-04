@@ -276,7 +276,7 @@ class Drone(CommunicatingAgent):
         inventory_count = len(self.knowledge["inventory"])
         waste_types = [w.waste_color for w in self.knowledge["inventory"]]
 
-        # Clear the inventory
+        # Clear the inventory and delete old wastes
         for waste in self.knowledge["inventory"]:
             del waste
         self.knowledge["inventory"] = []
@@ -284,6 +284,15 @@ class Drone(CommunicatingAgent):
         # Create one processed waste item and add it to inventory
         processed_waste = Waste(self.model, self.knowledge["zone_type"] + 1)
         self.knowledge["inventory"].append(processed_waste)
+
+        # Track the transformation event via the tracker if available.
+        if self.model.tracker:
+            self.model.tracker.track_waste(
+                waste_id=processed_waste.unique_id,
+                current_zone=processed_waste.waste_color,
+                status="transformed",
+                processor_id=self.unique_id,
+            )
 
         # Move east after transforming
         self.knowledge["should_move_east"] = True
