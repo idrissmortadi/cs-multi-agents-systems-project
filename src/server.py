@@ -5,10 +5,17 @@ from mesa.visualization import SolaraViz, make_plot_component, make_space_compon
 from agents import Drone
 from model import Environment
 from objects import COLORS_MAP, Waste, Zone
+from tracker import Tracker
+from strategies.memory_random_walk import MemoryRandomWalk
 from strategies import RandomWalk
 from tracker import Tracker
 
 print(f"Mesa version: {mesa.__version__}")
+sns.set_theme(style="whitegrid")
+
+tracker = Tracker("experiment_live")
+
+random_walk_strategy = MemoryRandomWalk
 sns.set_theme(style="whitegrid")
 
 tracker = Tracker("experiment_live")

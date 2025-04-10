@@ -162,6 +162,39 @@ class Drone(CommunicatingAgent):
         self.knowledge["actions"].append(f"moved east to {new_position}")
         self.logger.info(f"Moved east to position {new_position}")
 
+    def move_to(self, target_pos):
+        """
+        Move the drone to a specific target position if it's a valid, empty neighbor.
+        Updates the drone's knowledge after moving.
+        """
+        if target_pos in self.percepts.get("neighbors_empty", []):
+            new_position = target_pos
+
+            # If drone is actually moving to a new position (not staying in place)
+            # This check might be redundant if target_pos is guaranteed != self.pos
+            if new_position != self.pos:
+                # Reset can_pick when moving to a new position
+                self.knowledge["can_pick"] = True
+                self.logger.info("Reset can_pick flag after moving to target")
+
+            # Move the agent to the new position
+            self.model.grid.move_agent(self, new_position)
+
+            # Update knowledge about position
+            self.knowledge["actions"].append(f"moved to target {new_position}")
+            self.logger.info(f"Moved to targeted position {new_position}")
+
+        else:
+            # Target position is not valid (not a neighbor, or occupied)
+            self.logger.warning(
+                f"Attempted move to invalid/occupied target {target_pos}. "
+                f"Staying in place or consider fallback move."
+            )
+            # Optionally, perform a default random move as fallback:
+            # self.move()
+            # Or just log and do nothing this step regarding movement
+            self.knowledge["actions"].append(f"failed move to target {target_pos}")
+
     def pick_waste(self):
         """
         Pick up waste at the drone's current position if conditions are met.
