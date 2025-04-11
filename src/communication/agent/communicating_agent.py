@@ -45,7 +45,7 @@ class CommunicatingAgent(Agent):
         """Send message through the MessageService object."""
         self.__messages_service.send_message(message)
 
-    def send_brodcast_message(self, performative, content):
+    def send_broadcast_message(self, performative, content):
         """Broadcast message through the MessageService object."""
         for agent in self.model.agents:
             if agent != self and isinstance(agent, CommunicatingAgent):
