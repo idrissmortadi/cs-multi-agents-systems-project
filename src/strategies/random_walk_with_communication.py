@@ -115,7 +115,7 @@ class RandomWalkWithCommunication(BaseStrategy):
             self.drone.logger.info(
                 f"Send broadcast message: {waste.waste_color} {waste_pos}"
             )
-            self.drone.send_brodcast_message(
+            self.drone.send_broadcast_message(
                 MessagePerformative.INFORM_WASTE_POS_ADD_REF,
                 (waste.waste_color, waste_pos),
             )
