@@ -6,6 +6,8 @@ from mesa import Agent
 
 from communication.message.message_service import MessageService
 
+from communication.message.message import Message
+
 
 class CommunicatingAgent(Agent):
     """CommunicatingAgent class.
@@ -42,6 +44,14 @@ class CommunicatingAgent(Agent):
     def send_message(self, message):
         """Send message through the MessageService object."""
         self.__messages_service.send_message(message)
+
+    def send_brodcast_message(self, performative, content):
+        """Broadcast message through the MessageService object."""
+        for agent in self.model.agents:
+            if agent != self and isinstance(agent, CommunicatingAgent):
+                self.send_message(
+                    Message(self.unique_id, agent.unique_id, performative, content)
+                )
 
     def get_new_messages(self):
         """Return all the unread messages."""

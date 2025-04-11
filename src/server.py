@@ -6,8 +6,7 @@ from agents import Drone
 from model import Environment
 from objects import COLORS_MAP, Waste, Zone
 from tracker import Tracker
-from strategies.memory_walk import MemoryWalk
-from strategies import RandomWalk
+from strategies.random_walk_with_communication import RandomWalkWithCommunication
 from tracker import Tracker
 
 print(f"Mesa version: {mesa.__version__}")
@@ -15,7 +14,7 @@ sns.set_theme(style="whitegrid")
 
 tracker = Tracker("experiment_live")
 
-walk_strategy = MemoryWalk
+walk_strategy = RandomWalkWithCommunication
 
 
 def agent_portrayal(agent: mesa.Agent):
@@ -145,7 +144,7 @@ model_params = {
         "step": 1,
     },
     "tracker": tracker,
-    "drones_strategy": "Random Walk",
+    "drones_strategy": "RandomWalkWithCommunication",
 }
 
 model = Environment(

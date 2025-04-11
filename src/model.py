@@ -5,6 +5,7 @@ from typing import Literal, Optional
 from mesa import Model
 from mesa.datacollection import DataCollector
 from mesa.space import MultiGrid
+from communication.message.message_service import MessageService
 
 from agents import Drone
 from objects import Waste, Zone
@@ -28,13 +29,14 @@ class Environment(Model):
         tracker: Optional[Tracker] = None,
     ):
         super().__init__(seed=seed)
-
+        if MessageService.get_instance() is None:
+            self.message_service = MessageService(self)
         # Add tracker
         self.tracker = tracker
 
         # Get picked strategy
-        if drones_strategy == "Random Walk":
-            self.drones_strategy = STRATEGY_MAPPING[drones_strategy]
+
+        self.drones_strategy = STRATEGY_MAPPING[drones_strategy]
 
         # Clear old log files before setting up new ones
         self._clear_logs()

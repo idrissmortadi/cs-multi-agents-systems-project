@@ -1,7 +1,9 @@
 from strategies.base_strategy import BaseStrategy
+from communication import Message
+from communication import MessagePerformative
 
 
-class RandomWalk(BaseStrategy):
+class RandomWalkWithCommunication(BaseStrategy):
     """
     A strategy that implements a random walk for the drone agent.
     Once a drone collects two wastes, it will transform them.
@@ -15,7 +17,7 @@ class RandomWalk(BaseStrategy):
 
         :param drone: The drone agent using this strategy.
         """
-        super().__init__(name="RandomWalk", drone=drone)
+        super().__init__(name="RandomWalkWithCommunication", drone=drone)
 
     def execute(self):
         """
@@ -28,20 +30,8 @@ class RandomWalk(BaseStrategy):
         # Log deliberation information
         self.drone.logger.info("============DELIBERATION=============")
         self.drone.logger.info("Deliberating on next action")
-        self.drone.logger.info(
-            f"Current inventory: {self.drone.knowledge['inventory']}"
-        )
-        self.drone.logger.info(f"Can pick waste: {self.drone.knowledge['can_pick']}")
-        self.drone.logger.info(
-            f"Should move east: {self.drone.knowledge['should_move_east']}"
-        )
-        self.drone.logger.info(
-            f"transfer zone status: {self.drone.knowledge['in_transfer_zone']}"
-        )
-        self.drone.logger.info(
-            f"drop zone status: {self.drone.knowledge['in_drop_zone']}"
-        )
-        self.drone.logger.info(f"Zone type: {self.drone.knowledge['zone_type']}")
+        for key, value in self.drone.knowledge.items():
+            self.drone.logger.info(f"{key}: {value}")
         self.drone.logger.info(f"Position: {self.drone.pos}")
         self.drone.logger.info("=====================================")
 
@@ -113,10 +103,22 @@ class RandomWalk(BaseStrategy):
         compatible_wastes = []
         inventory_types = [w.waste_color for w in self.drone.knowledge["inventory"]]
         self.drone.logger.info(f"Inventory types: {inventory_types}")
+
         for waste_id, waste_pos in self.drone.percepts["neighbor_wastes"]:
             waste = self.drone.model.get_agent_by_id(waste_id)
 
-            # Check if waste type is compatible with current inventory
+            # Add waste to knowledge
+            self.drone.knowledge["collective_waste_memory"].add(
+                (waste.waste_color, waste_pos)
+            )
+
+            self.drone.logger.info(
+                f"Send broadcast message: {waste.waste_color} {waste_pos}"
+            )
+            self.drone.send_brodcast_message(
+                MessagePerformative.INFORM_WASTE_POS_ADD_REF,
+                (waste.waste_color, waste_pos),
+            )
             if (
                 (not inventory_types or waste.waste_color in inventory_types)
                 and waste.waste_color == self.drone.knowledge["zone_type"]
@@ -135,6 +137,13 @@ class RandomWalk(BaseStrategy):
             and self.drone.knowledge["can_pick"]
         ):
             self.drone.logger.info("Decision: Pick waste")
+            self.drone.logger.info(
+                f"Send broadcast message: {waste.waste_color} {waste_pos}"
+            )
+            self.drone.send_brodcast_message(
+                MessagePerformative.INFORM_WASTE_POS_REMOVE_REF,
+                (waste.waste_color, waste_pos),
+            )
             return "pick_waste"
         elif not self.drone.knowledge["can_pick"]:
             self.drone.logger.info("Cannot pick waste")

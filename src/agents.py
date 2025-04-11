@@ -82,6 +82,7 @@ class Drone(CommunicatingAgent):
             "zone_type": zone_type,
             "in_transfer_zone": False,  # Whether drone is in a transfer zone (boundary between zones: x = zone_type * 3 + 2)
             "in_drop_zone": False,  # Whether done is in last drop zone (las column)
+            "collective_waste_memory": set(),  # List of waste positions that have been detected but not picked up yet
         }
 
     @cleanup_logger
@@ -285,8 +286,23 @@ class Drone(CommunicatingAgent):
             f"Neighboring wastes: {len(self.percepts['neighbor_wastes'])}"
         )
 
-        # Update transfer zone status based on current position
-        # Check if the drone is in a transfer zone (boundary between zones)
+        unread_messages = self.get_messages()
+
+        for message in unread_messages:
+            if message.get_performative() == "INFORM_WASTE_POS_ADD_REF":
+                waste_color, waste_pos = message.get_content()
+                self.knowledge["collective_waste_memory"].add((waste_color, waste_pos))
+                self.logger.info(
+                    f"Received message about waste {waste_color} at {waste_pos}"
+                )
+            elif message.get_performative() == "INFORM_WASTE_POS_REMOVE_REF":
+                waste_color, waste_pos = message.get_content()
+                self.knowledge["collective_waste_memory"].discard(
+                    (waste_color, waste_pos)
+                )
+                self.logger.info(
+                    f"Received message about waste {waste_color} at {waste_pos} removed"
+                )
         is_transfer_zone = (
             self.pos[0]
             == (self.knowledge["zone_type"] + 1) * (self.knowledge["grid_width"] // 3)
