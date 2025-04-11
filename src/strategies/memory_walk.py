@@ -5,7 +5,7 @@ from strategies.base_strategy import BaseStrategy
 WASTE_MEMORY_DURATION = 20
 
 
-class MemoryRandomWalk(BaseStrategy):
+class MemoryWalk(BaseStrategy):
     """
     A RandomWalk strategy enhanced with memory.
     - Remembers visited cells to avoid redundant exploration.
