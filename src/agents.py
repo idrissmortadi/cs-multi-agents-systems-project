@@ -163,23 +163,27 @@ class Drone(CommunicatingAgent):
         self.knowledge["actions"].append(f"moved east to {new_position}")
         self.logger.info(f"Moved east to position {new_position}")
 
-    def move_to(self, target_pos):
+    def step_towards_target(self):
         """
-        Move the drone to a specific target position if it's a valid, empty neighbor.
-        Updates the drone's knowledge after moving.
+        Take a step towards the target position.
         """
-        if target_pos in self.percepts.get("neighbors_empty", []):
-            new_position = target_pos
 
-            # If drone is actually moving to a new position (not staying in place)
-            # This check might be redundant if target_pos is guaranteed != self.pos
-            if new_position != self.pos:
-                # Reset can_pick when moving to a new position
-                self.knowledge["can_pick"] = True
-                self.logger.info("Reset can_pick flag after moving to target")
+        target_pos = self.knowledge["target_pos"]
+        target_x, target_y = target_pos
 
-            # Move the agent to the new position
-            self.model.grid.move_agent(self, new_position)
+        neighbor_positions = self.percepts["neighbors_empty"]
+
+        # Pick closest neighbor position to target
+        closest_neighbor = min(
+            neighbor_positions,
+            key=lambda pos: (abs(pos[0] - target_x) + abs(pos[1] - target_y)),
+        )
+        new_position = closest_neighbor
+
+        self.logger.info(f"Moving towards target {target_pos} from {self.pos}")
+        self.logger.info(f"Moving to closest neighbor {new_position}")
+
+        self.model.grid.move_agent(self, new_position)
 
             # Update knowledge about position
             self.knowledge["actions"].append(f"moved to target {new_position}")
