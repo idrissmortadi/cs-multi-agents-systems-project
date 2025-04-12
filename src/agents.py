@@ -310,6 +310,48 @@ class Drone(CommunicatingAgent):
         Update the drone's knowledge based on its current percepts and state.
         This method is called at the beginning of each step.
         """
+
+        # REPORT ALL NEIGHBOR WASTES IF INVENTORY IS FULL OR CANNOT PICK
+        self.logger.info("Reporting all neighbor wastes")
+        for waste_id, waste_pos in self.percepts["neighbor_wastes"]:
+            waste = self.model.get_agent_by_id(waste_id)
+            self.logger.info(f"Found waste {waste.waste_color} at {waste_pos}")
+            self.send_broadcast_message(
+                MessagePerformative.INFORM_WASTE_POS_ADD_REF,
+                (waste.waste_color, waste_pos),
+            )
+
+            # Add to own collective memory if not already present
+            self.knowledge["collective_waste_memory"].add(
+                (waste.waste_color, waste_pos)
+            )
+
+        # ASSIGNING CLOSEST WASTE IF NO TARGET SET
+        compatible_wastes_collective_memory = [
+            wp
+            for wp in self.knowledge["collective_waste_memory"]
+            if wp[0] == self.zone_type
+        ]
+        if compatible_wastes_collective_memory and not self.knowledge["target_pos"]:
+            self.logger.info("No target set, assigning closest waste")
+            # Assign closest unassigned waste with compatible type
+            closest_waste = min(
+                compatible_wastes_collective_memory,
+                key=lambda wp: (
+                    abs(wp[1][0] - self.pos[0]) + abs(wp[1][1] - self.pos[1])
+                ),
+            )
+
+            self.knowledge["target_pos"] = closest_waste[1]  # Position of waste
+            self.logger.info(f"Assigned target position {closest_waste[1]}")
+
+        # SEARCH IF NO WASTE IN COLLECTIVE MEMORY
+        elif not self.knowledge["collective_waste_memory"]:
+            self.logger.info("No waste in collective memory, searching")
+            # Set target position to None to indicate searching
+            self.knowledge["target_pos"] = None
+            self.knowledge["current_state"] = "searching"
+
         # Store current percepts in knowledge history
         self.knowledge["percepts"].append(self.percepts)
         # Reset actions for the new step
@@ -327,23 +369,36 @@ class Drone(CommunicatingAgent):
             f"Neighboring wastes: {len(self.percepts['neighbor_wastes'])}"
         )
 
-        unread_messages = self.get_messages()
+        add_waste_messages = self.get_messages_from_performative(
+            MessagePerformative.INFORM_WASTE_POS_ADD_REF
+        )
+        delete_waste_messages = self.get_messages_from_performative(
+            MessagePerformative.INFORM_WASTE_POS_REMOVE_REF
+        )
 
-        for message in unread_messages:
-            if message.get_performative() == "INFORM_WASTE_POS_ADD_REF":
-                waste_color, waste_pos = message.get_content()
-                self.knowledge["collective_waste_memory"].add((waste_color, waste_pos))
+        # Update collective memory with new waste positions
+        self.logger.info("Updating collective waste memory")
+        for message in add_waste_messages:
+            waste_color, waste_pos = message.get_content()
+            # Log if is not already in memory
+            if (waste_color, waste_pos) not in self.knowledge[
+                "collective_waste_memory"
+            ]:
                 self.logger.info(
-                    f"Received message about waste {waste_color} at {waste_pos}"
+                    f"Adding waste {waste_color} at {waste_pos} to collective memory"
                 )
-            elif message.get_performative() == "INFORM_WASTE_POS_REMOVE_REF":
-                waste_color, waste_pos = message.get_content()
-                self.knowledge["collective_waste_memory"].discard(
-                    (waste_color, waste_pos)
-                )
+            self.knowledge["collective_waste_memory"].add((waste_color, waste_pos))
+
+        # Discard waste positions that have been picked up
+        for message in delete_waste_messages:
+            waste_color, waste_pos = message.get_content()
+            # Log if is in memory
+            if (waste_color, waste_pos) in self.knowledge["collective_waste_memory"]:
                 self.logger.info(
-                    f"Received message about waste {waste_color} at {waste_pos} removed"
+                    f"Removing waste {waste_color} at {waste_pos} from collective memory"
                 )
+            self.knowledge["collective_waste_memory"].discard((waste_color, waste_pos))
+
         is_transfer_zone = (
             self.pos[0]
             == (self.knowledge["zone_type"] + 1) * (self.knowledge["grid_width"] // 3)
@@ -359,6 +414,12 @@ class Drone(CommunicatingAgent):
         self.knowledge["in_drop_zone"] = is_drop_zone
         if is_drop_zone:
             self.logger.info("Currently in drop zone")
+
+        if self.knowledge["in_transfer_zone"] or self.knowledge["in_drop_zone"]:
+            self.logger.info(
+                f"Drone {self.unique_id} is in transfer or drop zone, cannot pick waste"
+            )
+            self.knowledge["should_move_east"] = False  # Reset flag
 
     def transform_waste(self):
         """
