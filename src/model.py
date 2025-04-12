@@ -5,9 +5,9 @@ from typing import Literal, Optional
 from mesa import Model
 from mesa.datacollection import DataCollector
 from mesa.space import MultiGrid
-from communication.message.message_service import MessageService
 
 from agents import Drone
+from communication.message.message_service import MessageService
 from objects import Waste, Zone
 from strategies import STRATEGY_MAPPING
 from tracker import Tracker
@@ -77,28 +77,28 @@ class Environment(Model):
                         and m._get_zone(a.pos).is_drop_zone
                     ]
                 ),
-                "avg_processing_time": lambda m: m.tracker.metrics[
-                    "processing_efficiency"
-                ]["avg_processing_time"]
-                if m.tracker and "processing_efficiency" in m.tracker.metrics
-                else 0,
-                "avg_throughput": lambda m: m.tracker.metrics["system_metrics"][
-                    "avg_throughput"
-                ]
-                if m.tracker and "system_metrics" in m.tracker.metrics
-                else 0,
-                "inventory_utilization": lambda m: sum(
-                    [
-                        len(a.knowledge["inventory"])
-                        for a in m.grid.agents
-                        if isinstance(a, Drone)
-                    ]
-                ),
-                "avg_distance_per_agent": lambda m: m.tracker.metrics["agent_behavior"][
-                    "avg_distance_per_agent"
-                ]
-                if m.tracker
-                else 0,
+                #     "avg_processing_time": lambda m: m.tracker.metrics[
+                #         "processing_efficiency"
+                #     ]["avg_processing_time"]
+                #     if m.tracker and "processing_efficiency" in m.tracker.metrics
+                #     else 0,
+                #     "avg_throughput": lambda m: m.tracker.metrics["system_metrics"][
+                #         "avg_throughput"
+                #     ]
+                #     if m.tracker and "system_metrics" in m.tracker.metrics
+                #     else 0,
+                #     "inventory_utilization": lambda m: sum(
+                #         [
+                #             len(a.knowledge["inventory"])
+                #             for a in m.grid.agents
+                #             if isinstance(a, Drone)
+                #         ]
+                #     ),
+                #     "avg_distance_per_agent": lambda m: m.tracker.metrics["agent_behavior"][
+                #         "avg_distance_per_agent"
+                #     ]
+                #     if m.tracker
+                #     else 0,
             },
             agent_reporters={},
         )
@@ -247,7 +247,7 @@ class Environment(Model):
         for _ in range(num_drones):
             if zone_positions:
                 pos = self.random.choice(zone_positions)
-                a = Drone(self, zone_type, self.drones_strategy)
+                a = Drone(self, zone_type)
                 self.grid.place_agent(a, pos)
                 self.logger.info(
                     f"Placed drone {a.unique_id} at position {pos} in zone type {zone_type}"
