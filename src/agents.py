@@ -459,13 +459,107 @@ class Drone(CommunicatingAgent):
         )
 
     def deliberate(self):
-        """
-        Decide which action to take based on the drone's current knowledge and state.
+        # Log knowledge information
+        self.logger.info("============DELIBERATION=============")
+        for key, value in self.knowledge.items():
+            self.logger.info(f"\t{key}: {value}")
 
-        Returns:
-            str: The action to take ("transform_waste", "drop_waste", "pick_waste", "move_east", or "move")
-        """
-        return self.strategy.execute()
+        self.logger.info(f"\tPosition: {self.pos}")
+        self.logger.info("=====================================")
+
+        # COLLECTION STAGE
+        if (
+            self.knowledge["target_pos"]
+            and abs(self.pos[0] - self.knowledge["target_pos"][0]) <= 1
+            and abs(self.pos[1] - self.knowledge["target_pos"][1])
+        ):
+            self.knowledge["target_pos"] = None
+            # Check if drone can pick (inventory < 2 and compatible waste exists at current pos)
+            can_pick_here = False
+            if len(self.knowledge["inventory"]) < 2:
+                for waste_id, waste_pos in self.percepts["neighbor_wastes"]:
+                    if waste_pos == self.pos:
+                        waste = self.model.get_agent_by_id(waste_id)
+                        # Check compatibility (correct zone type and matches inventory if not empty)
+                        inventory_types = [
+                            w.waste_color for w in self.knowledge["inventory"]
+                        ]
+                        if waste.waste_color == self.knowledge["zone_type"] and (
+                            not inventory_types or waste.waste_color in inventory_types
+                        ):
+                            can_pick_here = True
+                            break  # Found a pickable waste
+
+            if can_pick_here:
+                return "pick_waste"
+
+        elif self.knowledge["target_pos"] and self.knowledge["target_pos"] != self.pos:
+            # If target is set but not yet reached, move towards it
+            # Check if target still exists in collective memory? Optional optimization.
+            if self.knowledge["target_pos"] not in [
+                wp[1] for wp in self.knowledge["collective_waste_memory"]
+            ]:
+                # Target waste might have been picked by another agent
+                self.knowledge["target_pos"] = None  # Reset target
+                return "move"
+
+            return "step_towards_target"  # Move toward waste location
+
+        # PROCESSING STAGE
+        if len(self.knowledge["inventory"]) == 2 and self.knowledge["zone_type"] < 2:
+            self.logger.info(
+                f"Processing waste with zone type {self.knowledge['zone_type']}"
+            )
+            return "transform_waste"  # Transform waste
+
+        elif (
+            any(
+                w.waste_color == self.zone_type + 1 for w in self.knowledge["inventory"]
+            )
+            and self.knowledge["should_move_east"]
+        ):
+            self.logger.info(
+                f"Moving east after processing waste with zone type {self.knowledge['zone_type']}"
+            )
+            return "move_east"  # Continue to DELIVERY stage
+
+        # DELIVERY STAGE
+        # Drop if in transfer zone and inventory has waste of higher zone type or in drop zone
+        can_drop = (
+            self.knowledge["in_transfer_zone"]
+            and self.knowledge["zone_type"] < 2
+            and len(self.knowledge["inventory"]) > 0
+            and (
+                any(
+                    w.waste_color == self.knowledge["zone_type"] + 1
+                    for w in self.knowledge["inventory"]
+                )
+            )
+        ) or (
+            self.knowledge["in_drop_zone"]
+            and len(self.knowledge["inventory"]) > 0
+            and all(w.waste_color == 2 for w in self.knowledge["inventory"])
+        )
+
+        if can_drop:
+            self.logger.info(
+                f"Can drop waste in transfer zone with zone type {self.knowledge['zone_type']}"
+            )
+            return "drop_waste"  # Drop processed waste
+
+        # IF ANY NEARBY WASTE CAN BE PICKED
+        can_pick = (
+            len(self.knowledge["inventory"]) < 2
+            and self.percepts["neighbor_wastes"]
+            and self.knowledge["can_pick"]
+        )
+        if can_pick:
+            self.logger.info(
+                f"Found waste nearby at {self.percepts['neighbor_wastes']}"
+            )
+            return "pick_waste"
+
+        return "move"
 
     def step_agent(self):
         """
