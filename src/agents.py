@@ -3,9 +3,8 @@ import os
 import random
 from functools import wraps
 
-from communication import CommunicatingAgent
+from communication import CommunicatingAgent, MessagePerformative
 from objects import Waste
-from strategies import BaseStrategy, RandomWalk
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -45,7 +44,7 @@ class Drone(CommunicatingAgent):
     Each drone is assigned to a specific zone type.
     """
 
-    def __init__(self, model, zone_type, strategy_cls: BaseStrategy = RandomWalk):
+    def __init__(self, model, zone_type):
         """
         Initialize a drone agent.
 
@@ -58,8 +57,6 @@ class Drone(CommunicatingAgent):
         # Setup individual agent logger
         self._setup_logger()
         self.zone_type = zone_type
-
-        self.strategy = strategy_cls(self)
 
         self.logger.info(
             f"Initializing drone {self.unique_id} with zone type {zone_type}"
@@ -83,6 +80,8 @@ class Drone(CommunicatingAgent):
             "in_transfer_zone": False,  # Whether drone is in a transfer zone (boundary between zones: x = zone_type * 3 + 2)
             "in_drop_zone": False,  # Whether done is in last drop zone (las column)
             "collective_waste_memory": set(),  # List of waste positions that have been detected but not picked up yet
+            "target_pos": None,  # Target position for the drone to move to
+            "current_state": None,  # search, deliver, collect
         }
 
     @cleanup_logger
@@ -184,21 +183,6 @@ class Drone(CommunicatingAgent):
         self.logger.info(f"Moving to closest neighbor {new_position}")
 
         self.model.grid.move_agent(self, new_position)
-
-            # Update knowledge about position
-            self.knowledge["actions"].append(f"moved to target {new_position}")
-            self.logger.info(f"Moved to targeted position {new_position}")
-
-        else:
-            # Target position is not valid (not a neighbor, or occupied)
-            self.logger.warning(
-                f"Attempted move to invalid/occupied target {target_pos}. "
-                f"Staying in place or consider fallback move."
-            )
-            # Optionally, perform a default random move as fallback:
-            # self.move()
-            # Or just log and do nothing this step regarding movement
-            self.knowledge["actions"].append(f"failed move to target {target_pos}")
 
     def pick_waste(self):
         """
@@ -573,3 +557,5 @@ class Drone(CommunicatingAgent):
         action = self.deliberate()
         self.percepts = self.model.do(self, action)
         self.logger.info("Finished step")
+        self.logger.info("=====================================")
+        self.logger.info("=====================================")
