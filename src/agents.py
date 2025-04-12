@@ -203,45 +203,82 @@ class Drone(CommunicatingAgent):
     def pick_waste(self):
         """
         Pick up waste at the drone's current position if conditions are met.
+        Sends a broadcast message upon successful pickup.
         Returns:
             bool: True if waste was picked up, False otherwise
         """
         wastes_at_position = [
             (waste_id, waste_pos)
             for waste_id, waste_pos in self.percepts["neighbor_wastes"]
+            # if waste_pos == self.pos  # Ensure waste is at the current position
         ]
 
         # Check if there are any wastes at the drone's current position and if there is space in the inventory
         if wastes_at_position and len(self.knowledge["inventory"]) < 2:
-            waste_id, _ = wastes_at_position[0]
+            waste_id, waste_pos = wastes_at_position[
+                0
+            ]  # Pick the first one found at pos
             waste = self.model.get_agent_by_id(waste_id)
-            self.logger.info(f"Found waste {waste_id}")
+            self.logger.info(f"Found waste {waste_id} at current position {self.pos}")
 
-            # Check if waste type is compatible with current inventory
+            # Check if waste type is compatible with current inventory and drone's zone
             inventory_types = [w.waste_color for w in self.knowledge["inventory"]]
-            if (
+            if waste.waste_color == self.knowledge["zone_type"] and (
                 not inventory_types or waste.waste_color in inventory_types
-            ) and waste.waste_color == self.knowledge["zone_type"]:
-                if waste.pos is not None:
+            ):
+                if waste.pos is not None:  # Ensure waste is actually on the grid
+                    original_waste_color = waste.waste_color
+                    original_waste_pos = waste.pos
                     self.model.grid.remove_agent(waste)
                     self.knowledge["inventory"].append(waste)
+
+                    self.knowledge["actions"].append(f"picked waste {waste_id}")
+                    self.logger.info(f"Picked waste {waste.unique_id}")
+                    self.logger.info(
+                        f"Now carrying {len(self.knowledge['inventory'])} items in inventory"
+                    )
+
+                    # Send broadcast message to remove waste from collective memory
+                    self.send_broadcast_message(
+                        MessagePerformative.INFORM_WASTE_POS_REMOVE_REF,
+                        (original_waste_color, original_waste_pos),
+                    )
+                    # Remove from own collective memory
+                    self.knowledge["collective_waste_memory"].discard(
+                        (original_waste_color, original_waste_pos)
+                    )
+
+                    self.logger.info(
+                        f"Sent broadcast to remove waste {original_waste_color} at {original_waste_pos}"
+                    )
+
+                    # Reset can_pick state as an action was taken
+                    self.knowledge["can_pick"] = True
+
+                    return True
                 else:
                     self.logger.warning(
                         f"Waste {waste_id} has no position, cannot pick up"
                     )
                     return False
-
-                self.knowledge["actions"].append(f"picked waste {waste_id}")
-                self.logger.info(f"Picked waste {waste.unique_id}")
-                self.logger.info(
-                    f"Now carrying {len(self.knowledge['inventory'])} items in inventory"
-                )
-                return True
             else:
-                self.knowledge["can_pick"] = False
-                self.logger.info(f"Cannot pick waste {waste_id} - incompatible type")
+                # Incompatible waste type found at position
+                self.knowledge["can_pick"] = False  # Cannot pick this specific waste
+                self.logger.info(
+                    f"Cannot pick waste {waste_id} - incompatible type or zone"
+                )
+                # Do not return False yet, maybe another waste at the same pos is compatible?
+                # (Current logic picks the first waste found, so this path might not be fully robust if multiple wastes exist at pos)
 
-        self.logger.info("Did not pick any waste")
+        # No compatible waste found at position, or inventory full
+        if not wastes_at_position:
+            self.logger.info("No waste found at current position")
+        elif len(self.knowledge["inventory"]) >= 2:
+            self.logger.info("Inventory full, cannot pick waste")
+
+        # If we reached here, no waste was picked
+        # Keep can_pick as True unless explicitly set to False due to incompatibility
+        # self.knowledge["can_pick"] = True # Resetting here might be wrong if incompatibility was found
         return False
 
     def drop_waste(self):
