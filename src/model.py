@@ -429,7 +429,7 @@ class Environment(Model):
             drone.model.tracker.track_agent_movement(
                 agent_id=drone.unique_id,
                 position=drone.pos,
-                inventory_size=len(drone.knowledge["inventory"]),
+                inventory_size=len(drone.knowledge.inventory),
                 action=action,
             )
 
@@ -459,7 +459,7 @@ class Environment(Model):
         ]
 
         # Get the drone's current zone type
-        drone_zone_type = drone.knowledge["zone_type"]
+        drone_zone_type = drone.knowledge.zone_type
 
         # Filter neighbors - only include cells that have the same zone type
         valid_neighbors = []

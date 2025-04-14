@@ -1,7 +1,9 @@
 import logging
 import os
 import random
+from dataclasses import dataclass, field
 from functools import wraps
+from typing import List, Optional, Set, Tuple
 
 from communication import CommunicatingAgent, MessagePerformative
 from objects import Waste
@@ -38,6 +40,37 @@ def cleanup_logger(func):
     return wrapper
 
 
+@dataclass
+class DronePercepts:
+    """Represents the percepts of a drone agent."""
+
+    neighbors_empty: List[Tuple[int, int]] = field(default_factory=list)
+    neighbor_zones: List[Tuple[int, Tuple[int, int]]] = field(default_factory=list)
+    neighbor_drones: List[Tuple[int, Tuple[int, int]]] = field(default_factory=list)
+    neighbor_wastes: List[Tuple[int, Tuple[int, int]]] = field(default_factory=list)
+
+
+@dataclass
+class DroneKnowledge:
+    """Represents the knowledge base of a drone agent."""
+
+    inventory: List[Waste] = field(default_factory=list)
+    can_pick: bool = True
+    should_move_east: bool = False
+    actions: List[str] = field(default_factory=list)
+    percepts: List[DronePercepts] = field(default_factory=list)
+    grid_width: int = 0
+    grid_height: int = 0
+    zone_type: int = 0
+    in_transfer_zone: bool = False
+    in_drop_zone: bool = False
+    collective_waste_memory: Set[Tuple[int, Tuple[int, int]]] = field(
+        default_factory=set
+    )
+    target_pos: Optional[Tuple[int, int]] = None
+    current_state: Optional[str] = None
+
+
 class Drone(CommunicatingAgent):
     """
     A drone agent that can move around the grid, pick up, transform, and drop waste.
@@ -56,33 +89,21 @@ class Drone(CommunicatingAgent):
 
         # Setup individual agent logger
         self._setup_logger()
-        self.zone_type = zone_type
+        self.zone_type = zone_type  # Keep zone_type directly accessible if needed
 
         self.logger.info(
             f"Initializing drone {self.unique_id} with zone type {zone_type}"
         )
 
-        self.percepts = {
-            "neighbors_empty": [],  # [(x, y), ...] in correponding zone color
-            "neighbor_zones": [],  # [(zone_type, zone_pos), ...]
-            "neighbor_drones": [],  # [(drone_id, drone_pos), ...]
-            "neighbor_wastes": [],  # [(waste_id, waste_pos), ...]
-        }
-        self.knowledge = {
-            "inventory": [],  # List of Waste objects being carried
-            "can_pick": True,
-            "should_move_east": False,  # Flag to indicate when the drone should move east
-            "actions": [],
-            "percepts": [],
-            "grid_width": self.model.grid.width,
-            "grid_height": self.model.grid.height,
-            "zone_type": zone_type,
-            "in_transfer_zone": False,  # Whether drone is in a transfer zone (boundary between zones: x = zone_type * 3 + 2)
-            "in_drop_zone": False,  # Whether done is in last drop zone (las column)
-            "collective_waste_memory": set(),  # List of waste positions that have been detected but not picked up yet
-            "target_pos": None,  # Target position for the drone to move to
-            "current_state": None,  # search, deliver, collect
-        }
+        # Initialize percepts using the dataclass
+        self.percepts = DronePercepts()
+
+        # Initialize knowledge using the dataclass
+        self.knowledge = DroneKnowledge(
+            grid_width=self.model.grid.width,
+            grid_height=self.model.grid.height,
+            zone_type=zone_type,
+        )
 
     @cleanup_logger
     def _setup_logger(self):
@@ -103,32 +124,29 @@ class Drone(CommunicatingAgent):
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
 
-    def move(self):
+    def move_randomly(self):
         """
         Move the drone to a new position chosen randomly from available empty neighbors.
         If no empty neighbors are available, the drone stays in place.
         Updates the drone's knowledge after moving.
         """
         # Choose a new position randomly from available empty neighbors or stay in place
-        new_position = random.choice(
-            (
-                self.percepts["neighbors_empty"]
-                if len(self.percepts["neighbors_empty"]) > 0
-                else [self.pos]
-            )
-        )
+        if self.percepts.neighbors_empty:
+            new_position = random.choice(self.percepts.neighbors_empty)
+        else:
+            new_position = self.pos
 
         # If drone is actually moving to a new position (not staying in place)
         if new_position != self.pos:
             # Reset can_pick when moving to a new position
-            self.knowledge["can_pick"] = True
+            self.knowledge.can_pick = True
             self.logger.info("Reset can_pick flag after moving")
 
         # Move the agent to the new position
         self.model.grid.move_agent(self, new_position)
 
         # Update knowledge about position
-        self.knowledge["actions"].append(f"moved to {new_position}")
+        self.knowledge.actions.append(f"moved to {new_position}")
         self.logger.info(f"Moved to position {new_position}")
 
     def move_east(self):
@@ -139,7 +157,7 @@ class Drone(CommunicatingAgent):
         """
         # Look for empty positions to the east
         east_positions = [
-            pos for pos in self.percepts["neighbors_empty"] if pos[0] > self.pos[0]
+            pos for pos in self.percepts.neighbors_empty if pos[0] > self.pos[0]
         ]
 
         # If there are positions to the east, move to the first one; otherwise, stay in place
@@ -152,14 +170,14 @@ class Drone(CommunicatingAgent):
         # If drone is actually moving to a new position (not staying in place)
         if new_position != self.pos:
             # Reset can_pick when moving to a new position
-            self.knowledge["can_pick"] = True
+            self.knowledge.can_pick = True
             self.logger.info("Reset can_pick flag after moving east")
 
         # Move the agent to the new position
         self.model.grid.move_agent(self, new_position)
 
         # Update knowledge about position
-        self.knowledge["actions"].append(f"moved east to {new_position}")
+        self.knowledge.actions.append(f"moved east to {new_position}")
         self.logger.info(f"Moved east to position {new_position}")
 
     def step_towards_target(self):
@@ -167,10 +185,10 @@ class Drone(CommunicatingAgent):
         Take a step towards the target position.
         """
 
-        target_pos = self.knowledge["target_pos"]
+        target_pos = self.knowledge.target_pos
         target_x, target_y = target_pos
 
-        neighbor_positions = self.percepts["neighbors_empty"]
+        neighbor_positions = self.percepts.neighbors_empty
 
         # Pick closest neighbor position to target
         closest_neighbor = min(
@@ -193,12 +211,12 @@ class Drone(CommunicatingAgent):
         """
         wastes_at_position = [
             (waste_id, waste_pos)
-            for waste_id, waste_pos in self.percepts["neighbor_wastes"]
+            for waste_id, waste_pos in self.percepts.neighbor_wastes
             # if waste_pos == self.pos  # Ensure waste is at the current position
         ]
 
         # Check if there are any wastes at the drone's current position and if there is space in the inventory
-        if wastes_at_position and len(self.knowledge["inventory"]) < 2:
+        if wastes_at_position and len(self.knowledge.inventory) < 2:
             waste_id, waste_pos = wastes_at_position[
                 0
             ]  # Pick the first one found at pos
@@ -206,29 +224,29 @@ class Drone(CommunicatingAgent):
             self.logger.info(f"Found waste {waste_id} at current position {self.pos}")
 
             # Check if waste type is compatible with current inventory and drone's zone
-            inventory_types = [w.waste_color for w in self.knowledge["inventory"]]
-            if waste.waste_color == self.knowledge["zone_type"] and (
+            inventory_types = [w.waste_color for w in self.knowledge.inventory]
+            if waste.waste_color == self.knowledge.zone_type and (
                 not inventory_types or waste.waste_color in inventory_types
             ):
                 if waste.pos is not None:  # Ensure waste is actually on the grid
                     original_waste_color = waste.waste_color
                     original_waste_pos = waste.pos
-                    self.model.grid.remove_agent(waste)
-                    self.knowledge["inventory"].append(waste)
+                    self.model.grid.remove_agent(waste)  # Remove waste from grid
+                    self.knowledge.inventory.append(waste)
 
-                    self.knowledge["actions"].append(f"picked waste {waste_id}")
+                    self.knowledge.actions.append(f"picked waste {waste_id}")
                     self.logger.info(f"Picked waste {waste.unique_id}")
                     self.logger.info(
-                        f"Now carrying {len(self.knowledge['inventory'])} items in inventory"
+                        f"Now carrying {len(self.knowledge.inventory)} items in inventory"
                     )
 
                     # Send broadcast message to remove waste from collective memory
-                    self.send_broadcast_message(
-                        MessagePerformative.INFORM_WASTE_POS_REMOVE_REF,
-                        (original_waste_color, original_waste_pos),
-                    )
+                    # self.send_broadcast_message(
+                    #     MessagePerformative.INFORM_WASTE_POS_REMOVE_REF,
+                    #     (original_waste_color, original_waste_pos),
+                    # )
                     # Remove from own collective memory
-                    self.knowledge["collective_waste_memory"].discard(
+                    self.knowledge.collective_waste_memory.discard(
                         (original_waste_color, original_waste_pos)
                     )
 
@@ -237,7 +255,7 @@ class Drone(CommunicatingAgent):
                     )
 
                     # Reset can_pick state as an action was taken
-                    self.knowledge["can_pick"] = True
+                    self.knowledge.can_pick = True
 
                     return True
                 else:
@@ -247,7 +265,7 @@ class Drone(CommunicatingAgent):
                     return False
             else:
                 # Incompatible waste type found at position
-                self.knowledge["can_pick"] = False  # Cannot pick this specific waste
+                self.knowledge.can_pick = False  # Cannot pick this specific waste
                 self.logger.info(
                     f"Cannot pick waste {waste_id} - incompatible type or zone"
                 )
@@ -257,12 +275,12 @@ class Drone(CommunicatingAgent):
         # No compatible waste found at position, or inventory full
         if not wastes_at_position:
             self.logger.info("No waste found at current position")
-        elif len(self.knowledge["inventory"]) >= 2:
+        elif len(self.knowledge.inventory) >= 2:
             self.logger.info("Inventory full, cannot pick waste")
 
         # If we reached here, no waste was picked
         # Keep can_pick as True unless explicitly set to False due to incompatibility
-        # self.knowledge["can_pick"] = True # Resetting here might be wrong if incompatibility was found
+        # self.knowledge.can_pick = True # Resetting here might be wrong if incompatibility was found
         return False
 
     def drop_waste(self):
@@ -272,19 +290,19 @@ class Drone(CommunicatingAgent):
             bool: True if waste was dropped, False otherwise
         """
         # Get the processed waste type from inventory
-        processed_waste = self.knowledge["inventory"].pop(0)
+        processed_waste = self.knowledge.inventory.pop(0)
 
         # Create a new waste object with the same type
         self.model.grid.place_agent(processed_waste, self.pos)
 
-        self.knowledge["actions"].append("dropped waste")
+        self.knowledge.actions.append("dropped waste")
         self.logger.info(f"Dropped waste at {self.pos}")
         self.logger.info(
-            f"Inventory now contains {len(self.knowledge['inventory'])} items"
+            f"Inventory now contains {len(self.knowledge.inventory)} items"
         )
 
         # Don't move east after dropping waste
-        self.knowledge["should_move_east"] = False
+        self.knowledge.should_move_east = False
         self.logger.info("Unset should_move_east flag after dropping waste")
 
         return True
@@ -297,26 +315,24 @@ class Drone(CommunicatingAgent):
 
         # REPORT ALL NEIGHBOR WASTES IF INVENTORY IS FULL OR CANNOT PICK
         self.logger.info("Reporting all neighbor wastes")
-        for waste_id, waste_pos in self.percepts["neighbor_wastes"]:
+        for waste_id, waste_pos in self.percepts.neighbor_wastes:
             waste = self.model.get_agent_by_id(waste_id)
             self.logger.info(f"Found waste {waste.waste_color} at {waste_pos}")
-            self.send_broadcast_message(
-                MessagePerformative.INFORM_WASTE_POS_ADD_REF,
-                (waste.waste_color, waste_pos),
-            )
+            # self.send_broadcast_message(
+            #     MessagePerformative.INFORM_WASTE_POS_ADD_REF,
+            #     (waste.waste_color, waste_pos),
+            # )
 
             # Add to own collective memory if not already present
-            self.knowledge["collective_waste_memory"].add(
-                (waste.waste_color, waste_pos)
-            )
+            self.knowledge.collective_waste_memory.add((waste.waste_color, waste_pos))
 
         # ASSIGNING CLOSEST WASTE IF NO TARGET SET
         compatible_wastes_collective_memory = [
             wp
-            for wp in self.knowledge["collective_waste_memory"]
+            for wp in self.knowledge.collective_waste_memory
             if wp[0] == self.zone_type
         ]
-        if compatible_wastes_collective_memory and not self.knowledge["target_pos"]:
+        if compatible_wastes_collective_memory and not self.knowledge.target_pos:
             self.logger.info("No target set, assigning closest waste")
             # Assign closest unassigned waste with compatible type
             closest_waste = min(
@@ -326,32 +342,28 @@ class Drone(CommunicatingAgent):
                 ),
             )
 
-            self.knowledge["target_pos"] = closest_waste[1]  # Position of waste
+            self.knowledge.target_pos = closest_waste[1]  # Position of waste
             self.logger.info(f"Assigned target position {closest_waste[1]}")
 
         # SEARCH IF NO WASTE IN COLLECTIVE MEMORY
-        elif not self.knowledge["collective_waste_memory"]:
+        elif not self.knowledge.collective_waste_memory:
             self.logger.info("No waste in collective memory, searching")
             # Set target position to None to indicate searching
-            self.knowledge["target_pos"] = None
-            self.knowledge["current_state"] = "searching"
+            self.knowledge.target_pos = None
+            self.knowledge.current_state = "searching"
 
         # Store current percepts in knowledge history
-        self.knowledge["percepts"].append(self.percepts)
+        self.knowledge.percepts.append(self.percepts)
         # Reset actions for the new step
-        self.knowledge["actions"] = []
+        self.knowledge.actions = []
 
         self.logger.info(f"Starting update at position {self.pos}")
 
         # Log percepts information
-        self.logger.debug(f"Empty neighbors: {len(self.percepts['neighbors_empty'])}")
-        self.logger.debug(f"Neighboring zones: {len(self.percepts['neighbor_zones'])}")
-        self.logger.debug(
-            f"Neighboring drones: {len(self.percepts['neighbor_drones'])}"
-        )
-        self.logger.debug(
-            f"Neighboring wastes: {len(self.percepts['neighbor_wastes'])}"
-        )
+        self.logger.debug(f"Empty neighbors: {len(self.percepts.neighbors_empty)}")
+        self.logger.debug(f"Neighboring zones: {len(self.percepts.neighbor_zones)}")
+        self.logger.debug(f"Neighboring drones: {len(self.percepts.neighbor_drones)}")
+        self.logger.debug(f"Neighboring wastes: {len(self.percepts.neighbor_wastes)}")
 
         add_waste_messages = self.get_messages_from_performative(
             MessagePerformative.INFORM_WASTE_POS_ADD_REF
@@ -365,45 +377,42 @@ class Drone(CommunicatingAgent):
         for message in add_waste_messages:
             waste_color, waste_pos = message.get_content()
             # Log if is not already in memory
-            if (waste_color, waste_pos) not in self.knowledge[
-                "collective_waste_memory"
-            ]:
+            if (waste_color, waste_pos) not in self.knowledge.collective_waste_memory:
                 self.logger.info(
                     f"Adding waste {waste_color} at {waste_pos} to collective memory"
                 )
-            self.knowledge["collective_waste_memory"].add((waste_color, waste_pos))
+            self.knowledge.collective_waste_memory.add((waste_color, waste_pos))
 
         # Discard waste positions that have been picked up
         for message in delete_waste_messages:
             waste_color, waste_pos = message.get_content()
             # Log if is in memory
-            if (waste_color, waste_pos) in self.knowledge["collective_waste_memory"]:
+            if (waste_color, waste_pos) in self.knowledge.collective_waste_memory:
                 self.logger.info(
                     f"Removing waste {waste_color} at {waste_pos} from collective memory"
                 )
-            self.knowledge["collective_waste_memory"].discard((waste_color, waste_pos))
+            self.knowledge.collective_waste_memory.discard((waste_color, waste_pos))
 
         is_transfer_zone = (
             self.pos[0]
-            == (self.knowledge["zone_type"] + 1) * (self.knowledge["grid_width"] // 3)
-            - 1
-            and self.pos[0] != self.knowledge["grid_width"] - 1
+            == (self.knowledge.zone_type + 1) * (self.knowledge.grid_width // 3) - 1
+            and self.pos[0] != self.knowledge.grid_width - 1
         )
 
-        self.knowledge["in_transfer_zone"] = is_transfer_zone
+        self.knowledge.in_transfer_zone = is_transfer_zone
         if is_transfer_zone:
             self.logger.info("Currently in transfer zone")
 
-        is_drop_zone = self.pos[0] == self.knowledge["grid_width"] - 1
-        self.knowledge["in_drop_zone"] = is_drop_zone
+        is_drop_zone = self.pos[0] == self.knowledge.grid_width - 1
+        self.knowledge.in_drop_zone = is_drop_zone
         if is_drop_zone:
             self.logger.info("Currently in drop zone")
 
-        if self.knowledge["in_transfer_zone"] or self.knowledge["in_drop_zone"]:
+        if self.knowledge.in_transfer_zone or self.knowledge.in_drop_zone:
             self.logger.info(
                 f"Drone {self.unique_id} is in transfer or drop zone, cannot pick waste"
             )
-            self.knowledge["should_move_east"] = False  # Reset flag
+            self.knowledge.should_move_east = False  # Reset flag
 
     def transform_waste(self):
         """
@@ -411,17 +420,17 @@ class Drone(CommunicatingAgent):
         The processed waste type is one level higher than the zone type.
         """
         # Store information about what we're transforming for logging
-        inventory_count = len(self.knowledge["inventory"])
-        waste_types = [w.waste_color for w in self.knowledge["inventory"]]
+        inventory_count = len(self.knowledge.inventory)
+        waste_types = [w.waste_color for w in self.knowledge.inventory]
 
         # Clear the inventory and delete old wastes
-        for waste in self.knowledge["inventory"]:
+        for waste in self.knowledge.inventory:
             del waste
-        self.knowledge["inventory"] = []
+        self.knowledge.inventory = []
 
         # Create one processed waste item and add it to inventory
-        processed_waste = Waste(self.model, self.knowledge["zone_type"] + 1)
-        self.knowledge["inventory"].append(processed_waste)
+        processed_waste = Waste(self.model, self.knowledge.zone_type + 1)
+        self.knowledge.inventory.append(processed_waste)
 
         # Track the transformation event via the tracker if available.
         if self.model.tracker:
@@ -433,11 +442,11 @@ class Drone(CommunicatingAgent):
             )
 
         # Move east after transforming
-        self.knowledge["should_move_east"] = True
+        self.knowledge.should_move_east = True
         self.logger.info("Set should_move_east flag after transforming")
 
         # Log the transformation action
-        self.knowledge["actions"].append("transformed waste")
+        self.knowledge.actions.append("transformed waste")
         self.logger.info(
             f"Transformed {inventory_count} waste items of types {waste_types} into type {processed_waste.waste_color}"
         )
@@ -445,105 +454,12 @@ class Drone(CommunicatingAgent):
     def deliberate(self):
         # Log knowledge information
         self.logger.info("============DELIBERATION=============")
-        for key, value in self.knowledge.items():
-            self.logger.info(f"\t{key}: {value}")
-
+        # Log dataclass fields
+        self.logger.info(f"\tKnowledge: {self.knowledge}")
         self.logger.info(f"\tPosition: {self.pos}")
         self.logger.info("=====================================")
 
-        # COLLECTION STAGE
-        if (
-            self.knowledge["target_pos"]
-            and abs(self.pos[0] - self.knowledge["target_pos"][0]) <= 1
-            and abs(self.pos[1] - self.knowledge["target_pos"][1])
-        ):
-            self.knowledge["target_pos"] = None
-            # Check if drone can pick (inventory < 2 and compatible waste exists at current pos)
-            can_pick_here = False
-            if len(self.knowledge["inventory"]) < 2:
-                for waste_id, waste_pos in self.percepts["neighbor_wastes"]:
-                    if waste_pos == self.pos:
-                        waste = self.model.get_agent_by_id(waste_id)
-                        # Check compatibility (correct zone type and matches inventory if not empty)
-                        inventory_types = [
-                            w.waste_color for w in self.knowledge["inventory"]
-                        ]
-                        if waste.waste_color == self.knowledge["zone_type"] and (
-                            not inventory_types or waste.waste_color in inventory_types
-                        ):
-                            can_pick_here = True
-                            break  # Found a pickable waste
-
-            if can_pick_here:
-                return "pick_waste"
-
-        elif self.knowledge["target_pos"] and self.knowledge["target_pos"] != self.pos:
-            # If target is set but not yet reached, move towards it
-            # Check if target still exists in collective memory? Optional optimization.
-            if self.knowledge["target_pos"] not in [
-                wp[1] for wp in self.knowledge["collective_waste_memory"]
-            ]:
-                # Target waste might have been picked by another agent
-                self.knowledge["target_pos"] = None  # Reset target
-                return "move"
-
-            return "step_towards_target"  # Move toward waste location
-
-        # PROCESSING STAGE
-        if len(self.knowledge["inventory"]) == 2 and self.knowledge["zone_type"] < 2:
-            self.logger.info(
-                f"Processing waste with zone type {self.knowledge['zone_type']}"
-            )
-            return "transform_waste"  # Transform waste
-
-        elif (
-            any(
-                w.waste_color == self.zone_type + 1 for w in self.knowledge["inventory"]
-            )
-            and self.knowledge["should_move_east"]
-        ):
-            self.logger.info(
-                f"Moving east after processing waste with zone type {self.knowledge['zone_type']}"
-            )
-            return "move_east"  # Continue to DELIVERY stage
-
-        # DELIVERY STAGE
-        # Drop if in transfer zone and inventory has waste of higher zone type or in drop zone
-        can_drop = (
-            self.knowledge["in_transfer_zone"]
-            and self.knowledge["zone_type"] < 2
-            and len(self.knowledge["inventory"]) > 0
-            and (
-                any(
-                    w.waste_color == self.knowledge["zone_type"] + 1
-                    for w in self.knowledge["inventory"]
-                )
-            )
-        ) or (
-            self.knowledge["in_drop_zone"]
-            and len(self.knowledge["inventory"]) > 0
-            and all(w.waste_color == 2 for w in self.knowledge["inventory"])
-        )
-
-        if can_drop:
-            self.logger.info(
-                f"Can drop waste in transfer zone with zone type {self.knowledge['zone_type']}"
-            )
-            return "drop_waste"  # Drop processed waste
-
-        # IF ANY NEARBY WASTE CAN BE PICKED
-        can_pick = (
-            len(self.knowledge["inventory"]) < 2
-            and self.percepts["neighbor_wastes"]
-            and self.knowledge["can_pick"]
-        )
-        if can_pick:
-            self.logger.info(
-                f"Found waste nearby at {self.percepts['neighbor_wastes']}"
-            )
-            return "pick_waste"
-
-        return "move"
+        return "move_randomly"  # Default action
 
     def step_agent(self):
         """
@@ -555,7 +471,12 @@ class Drone(CommunicatingAgent):
         self.logger.info("Starting step")
         self.update()
         action = self.deliberate()
-        self.percepts = self.model.do(self, action)
+        # Update self.percepts with the result of the action
+        # Assuming model.do returns a dictionary matching the old structure
+        percept_dict = self.model.do(self, action)
+        # Convert the dictionary back to DronePercepts dataclass instance
+        self.percepts = DronePercepts(**percept_dict)
+
         self.logger.info("Finished step")
         self.logger.info("=====================================")
         self.logger.info("=====================================")
