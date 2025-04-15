@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-
-from communication.mailbox.mailbox import Mailbox
-
 from mesa import Agent
 
-from communication.message.message_service import MessageService
-
+from communication.mailbox.mailbox import Mailbox
 from communication.message.message import Message
+from communication.message.message_service import MessageService
+from objects import Waste, Zone
 
 
 class CommunicatingAgent(Agent):
@@ -48,10 +46,12 @@ class CommunicatingAgent(Agent):
     def send_broadcast_message(self, performative, content):
         """Broadcast message through the MessageService object."""
         for agent in self.model.agents:
-            if agent != self and isinstance(agent, CommunicatingAgent):
-                self.send_message(
-                    Message(self.unique_id, agent.unique_id, performative, content)
-                )
+            # Check if agent inherits from CommunicatingAgent
+            if isinstance(agent, Waste) or isinstance(agent, Zone) or agent == self:
+                continue
+
+            message = Message(self.unique_id, agent.unique_id, performative, content)
+            self.send_message(message)
 
     def get_new_messages(self):
         """Return all the unread messages."""
