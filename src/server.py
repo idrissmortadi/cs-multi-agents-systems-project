@@ -5,8 +5,7 @@ from mesa.visualization import SolaraViz, make_plot_component, make_space_compon
 from agents import Drone
 from model import Environment
 from objects import COLORS_MAP, Waste, Zone
-from tracker import Tracker
-from strategies.random_walk_with_communication import RandomWalkWithCommunication
+from strategies.complete_strategy import CompleteStrategy
 from tracker import Tracker
 
 print(f"Mesa version: {mesa.__version__}")
@@ -14,7 +13,7 @@ sns.set_theme(style="whitegrid")
 
 tracker = Tracker("experiment_live")
 
-walk_strategy = RandomWalkWithCommunication
+walk_strategy = CompleteStrategy
 
 
 def agent_portrayal(agent: mesa.Agent):
@@ -81,7 +80,7 @@ def agent_portrayal(agent: mesa.Agent):
 model_params = {
     "green_agents": {
         "type": "SliderInt",
-        "value": 3,
+        "value": 2,
         "label": "Number of green agents",
         "min": 1,
         "max": 100,
@@ -89,7 +88,7 @@ model_params = {
     },
     "yellow_agents": {
         "type": "SliderInt",
-        "value": 3,
+        "value": 1,
         "label": "Number of yellow agents",
         "min": 0,
         "max": 100,
@@ -97,7 +96,7 @@ model_params = {
     },
     "red_agents": {
         "type": "SliderInt",
-        "value": 3,
+        "value": 0,
         "label": "Number of red agents",
         "min": 0,
         "max": 100,
@@ -144,8 +143,9 @@ model_params = {
         "step": 1,
     },
     "tracker": tracker,
-    "drones_strategy": "RandomWalkWithCommunication",
+    "drones_strategy": "Complete Strategy",
 }
+
 
 model = Environment(
     drones_strategy=model_params["drones_strategy"],
@@ -160,6 +160,7 @@ model = Environment(
     tracker=tracker,
 )
 
+
 SpaceGraph = make_space_component(agent_portrayal)
 WastesPlot = make_plot_component(
     measure=["green_wastes", "yellow_wastes", "red_wastes"],
@@ -167,13 +168,13 @@ WastesPlot = make_plot_component(
 wastes_in_drop_zone = make_plot_component(["wastes_in_drop_zone"])
 
 # Add new plots for metrics
-ProcessingTimePlot = make_plot_component(["avg_processing_time"])
-InventoryUtilizationPlot = make_plot_component(["inventory_utilization"])
-ThroughputPlot = make_plot_component(["avg_throughput"])
+# ProcessingTimePlot = make_plot_component(["avg_processing_time"])
+# InventoryUtilizationPlot = make_plot_component(["inventory_utilization"])
+# ThroughputPlot = make_plot_component(["avg_throughput"])
 # ZoneClearancePlot = make_plot_component(
 #     ["zone_0_clearance_rate", "zone_1_clearance_rate", "zone_2_clearance_rate"]
 # )
-agents_behaviour = make_plot_component(["avg_distance_per_agent"])
+# agents_behaviour = make_plot_component(["avg_distance_per_agent"])
 
 # Update the SolaraViz to include the new plots
 page = SolaraViz(
@@ -182,10 +183,10 @@ page = SolaraViz(
         SpaceGraph,
         WastesPlot,
         wastes_in_drop_zone,
-        ProcessingTimePlot,
-        InventoryUtilizationPlot,
-        ThroughputPlot,
-        agents_behaviour,
+        # ProcessingTimePlot,
+        # InventoryUtilizationPlot,
+        # ThroughputPlot,
+        # agents_behaviour,
         # ZoneClearancePlot,
     ],
     model_params=model_params,
