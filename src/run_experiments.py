@@ -27,7 +27,6 @@ def run_experiment(params, steps=50):
         red_wastes=params["red_wastes"],
         seed=params["seed"],
         tracker=tracker,
-        drones_strategy="Complete Strategy",
     )
 
     # Run simulation

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Literal, Optional
+from typing import Optional
 
 from mesa import Model
 from mesa.datacollection import DataCollector
@@ -9,14 +9,12 @@ from mesa.space import MultiGrid
 from agents import Drone
 from communication.message.message_service import MessageService
 from objects import Waste, Zone
-from strategies import STRATEGY_MAPPING
 from tracker import Tracker
 
 
 class Environment(Model):
     def __init__(
         self,
-        drones_strategy: Literal["Random Walk"],
         green_agents=1,
         yellow_agents=0,
         red_agents=0,
@@ -39,10 +37,6 @@ class Environment(Model):
 
         # Add tracker
         self.tracker = tracker
-
-        # Get picked strategy
-
-        self.drones_strategy = STRATEGY_MAPPING[drones_strategy]
 
         # Clear old log files before setting up new ones
         self._clear_logs()
