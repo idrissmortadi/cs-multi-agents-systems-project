@@ -33,6 +33,10 @@ class MessageService:
         """Set the instant delivery parameter."""
         self.__instant_delivery = instant_delivery
 
+    def set_model(self, model):
+        """Set the model parameter."""
+        self.__model = model
+
     def send_message(self, message):
         """Dispatch message if instant delivery active, otherwise add the message to proceed list."""
         if self.__instant_delivery:
@@ -43,10 +47,14 @@ class MessageService:
     def dispatch_message(self, message):
         """Dispatch the message to the right agent."""
 
-        self.find_agent_from_id(message.get_dest()).receive_message(message)
+        dest = self.find_agent_from_id(message.get_dest())
+        # print(f"Dispatching message {message} to {dest}")
+        print(f"Dispatching message {message}")
+        dest.receive_message(message)
 
     def dispatch_messages(self):
         """Proceed each message received by the message service."""
+        print(f"Dispatching {len(self.__messages_to_proceed)} messages")
         if len(self.__messages_to_proceed) > 0:
             for message in self.__messages_to_proceed:
                 self.dispatch_message(message)

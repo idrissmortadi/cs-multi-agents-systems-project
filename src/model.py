@@ -25,12 +25,18 @@ class Environment(Model):
         red_wastes=2,
         width=9,
         height=9,
-        seed=None,
+        seed=42,
         tracker: Optional[Tracker] = None,
     ):
         super().__init__(seed=seed)
+
         if MessageService.get_instance() is None:
             self.message_service = MessageService(self)
+            self.message_service.set_instant_delivery(True)
+        else:
+            self.message_service = MessageService.get_instance()
+            self.message_service.set_model(self)
+
         # Add tracker
         self.tracker = tracker
 
@@ -440,7 +446,7 @@ class Environment(Model):
         drone.logger.info(f"Executing action: {action}")
 
         neighbors = drone.model.grid.get_neighborhood(
-            drone.pos, moore=False, include_center=False
+            drone.pos, moore=False, include_center=True
         )
         neighbor_zones = [
             a
@@ -462,17 +468,19 @@ class Environment(Model):
         drone_zone_type = drone.knowledge.zone_type
 
         # Filter neighbors - only include cells that have the same zone type
-        valid_neighbors = []
+        valid_neighbors_cells = []
         for pos in neighbors:
             zone_agent = neighbor_zones[neighbors.index(pos)]
             if zone_agent and zone_agent.zone_type <= drone_zone_type:
-                valid_neighbors.append(pos)
+                valid_neighbors_cells.append(pos)
 
         # Calculate empty neighbors from the filtered list
-        neighbors_empty = set(valid_neighbors) - set([a.pos for a in neighbor_drones])
+        neighbors_cells_empty = set(valid_neighbors_cells) - set(
+            [a.pos for a in neighbor_drones]
+        )
 
         percepts = {
-            "neighbors_empty": list(neighbors_empty),
+            "neighbors_empty": list(neighbors_cells_empty),
             "neighbor_zones": [(a.zone_type, a.pos) for a in neighbor_zones],
             "neighbor_drones": [(a.unique_id, a.pos) for a in neighbor_drones],
             "neighbor_wastes": [(a.unique_id, a.pos) for a in neighbor_wastes],
