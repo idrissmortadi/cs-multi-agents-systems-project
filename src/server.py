@@ -1,5 +1,4 @@
 import mesa
-import seaborn as sns
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
 from agents import Drone
@@ -8,7 +7,7 @@ from objects import COLORS_MAP, Waste, Zone
 from tracker import Tracker
 
 print(f"Mesa version: {mesa.__version__}")
-sns.set_theme(style="whitegrid")
+# sns.set_theme(style="whitegrid")
 
 tracker = Tracker("experiment_live")
 
