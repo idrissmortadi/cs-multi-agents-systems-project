@@ -7,9 +7,11 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from communication import CommunicatingAgent, MessagePerformative
 from objects import Waste
+from pairing_logic import pairing_logic
 
 # Set random seed for reproducibility
 random.seed(42)
+MAX_TIMEOUT_STEP = 10
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -88,6 +90,13 @@ class DroneKnowledge:
     current_state: Optional[str] = None
     visited_positions: Dict[Tuple[int, int], int] = field(default_factory=dict)
 
+    # Pairing-related attributes
+    carried_waste_timeout: int = MAX_TIMEOUT_STEP
+    other_agent_with_extra_waste: Optional["Drone"] = None
+    paired_agent: Optional["Drone"] = None
+    pairing_status: Optional[str] = "unpaired"
+    rejected_by: Optional[List[int]] = field(default_factory=list)
+
     def __str__(self):
         inventory_str = [
             f"Waste(id={w.unique_id}, color={w.waste_color})" for w in self.inventory
@@ -109,6 +118,11 @@ class DroneKnowledge:
             f"\tInDropZone: {self.in_drop_zone},\n"
             f"\tActions: {self.actions},\n"
             f"\tVisitedCount: {len(self.visited_positions)}\n"  # Add visited count for brevity
+            f"\tCarriedWasteTimeout: {self.carried_waste_timeout},\n"
+            f"\tOtherAgentWithExtraWaste: {self.other_agent_with_extra_waste},\n"
+            f"\tPairedAgent: {self.paired_agent},\n"
+            f"\tPairingStatus: {self.pairing_status},\n"
+            f"\tRejectedBy: {self.rejected_by},\n"
             f")"
         )
 
@@ -408,6 +422,8 @@ class Drone(CommunicatingAgent):
                     self.logger.info(
                         f"INVENTORY: Now carrying {len(self.knowledge.inventory)} item(s)"
                     )
+                    # reset carried waste timeout
+                    self.knowledge.carried_waste_timeout = MAX_TIMEOUT_STEP
                     return True
                 else:
                     self.logger.warning(
@@ -474,6 +490,8 @@ class Drone(CommunicatingAgent):
         if self.model.tracker:
             self.logger.info("TRACKING: Reported waste drop event for tracking")
 
+        # Update carried waste timeout
+        self.knowledge.carried_waste_timeout = MAX_TIMEOUT_STEP
         return True
 
     def update(self):
@@ -568,6 +586,16 @@ class Drone(CommunicatingAgent):
             self.logger.info(
                 f"TARGETING: Assigned new target at {self.knowledge.target_pos} (color {closest_waste[0]})"
             )
+
+            # Broadcast to other agents to remove from collective memory
+            self.logger.info(
+                f"COMMUNICATION: Broadcasting removal of target waste {closest_waste[0]} at {self.knowledge.target_pos}"
+            )
+            self.send_broadcast_message(
+                MessagePerformative.INFORM_WASTE_POS_REMOVE_REF,
+                (closest_waste[0], self.knowledge.target_pos),
+            )
+
         elif not self.knowledge.collective_waste_memory:
             self.logger.info("TARGETING: No waste in memory, entering search mode")
             self.knowledge.target_pos = None
@@ -627,6 +655,9 @@ class Drone(CommunicatingAgent):
             f"MEMORY: Total items in collective memory: {len(self.knowledge.collective_waste_memory)}"
         )
 
+        # === Pairing Logic ===
+        pairing_logic(self, new_messages, MAX_TIMEOUT_STEP)
+
     def transform_waste(self):
         """
         Transform all waste in the inventory into a single processed waste item.
@@ -681,6 +712,13 @@ class Drone(CommunicatingAgent):
             f"INVENTORY: Now carrying 1 item of type {processed_waste.waste_color}"
         )
 
+    def no_action(self):
+        """
+        No action taken. This is a placeholder for when no specific action is required.
+        """
+        self.logger.info("NO ACTION: No specific action required at this time")
+        return None
+
     def deliberate(self):
         """
         Deliberate on the next action for the drone agent based on the flowchart logic.
@@ -697,6 +735,16 @@ class Drone(CommunicatingAgent):
         self.logger.info(f"\tKnowledge: {self.knowledge}")
         self.logger.info(f"\tPosition: {self.pos}")
         self.logger.info("==========================================")
+
+        # PRIORITY 0: No action
+        if (
+            self.knowledge.carried_waste_timeout == 0
+            and self.knowledge.other_agent_with_extra_waste is None
+        ):
+            self.logger.info(
+                "NO ACTION: Expired carried waste timeout and no other agent with extra waste"
+            )
+            return "no_action"
 
         # PRIORITY 1: DELIVERY - Check if we can drop waste in transfer zone or drop zone
         can_drop = (
@@ -800,6 +848,14 @@ class Drone(CommunicatingAgent):
                     )
                     return "step_towards_target"
 
+        # PRIORITY 6: Ask other agents who have only one waste of the same color
+        if self.knowledge.other_agent_with_extra_waste:
+            self.logger.info(
+                f"COLLECTION STAGE: Moving towards other agent with extra waste {self.knowledge.other_agent_with_extra_waste.unique_id}"
+            )
+            self.knowledge.target_pos = self.knowledge.other_agent_with_extra_waste.pos
+            return "step_towards_target"
+
         # PRIORITY 6: SEARCH - No specific task, search by moving randomly
         self.logger.info(
             "SEARCH STAGE: No waste found or targeted, moving randomly to search"
@@ -851,3 +907,9 @@ class Drone(CommunicatingAgent):
         ):
             return True
         return False
+
+    def __repr__(self):
+        return f"Drone(id={self.unique_id}, zone_type={self.zone_type})"
+
+    def __str__(self):
+        return self.__repr__()
