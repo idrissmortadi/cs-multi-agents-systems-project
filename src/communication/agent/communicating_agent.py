@@ -46,7 +46,8 @@ class CommunicatingAgent(Agent):
     def send_broadcast_message(self, performative, content):
         """Broadcast message through the MessageService object."""
         for agent in self.model.agents:
-            # Check if agent inherits from CommunicatingAgent
+            # Skip the agent itself and the Waste and Zone agents
+            # as they are not supposed to receive messages.
             if isinstance(agent, Waste) or isinstance(agent, Zone) or agent == self:
                 continue
 
