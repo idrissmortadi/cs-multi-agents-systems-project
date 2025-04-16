@@ -14,8 +14,13 @@ class MessagePerformative(Enum):
     ASK_WHY = 104
     ARGUE = 105
     QUERY_REF = 106
+
     INFORM_WASTE_POS_ADD_REF = 107
     INFORM_WASTE_POS_REMOVE_REF = 108
+
+    REQUEST_PAIRING = 109
+    ACCEPT_PAIRING = 110
+    REJECT_PAIRING = 111
 
     def __str__(self):
         """Returns the name of the enum item."""
