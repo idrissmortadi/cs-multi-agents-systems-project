@@ -6,8 +6,8 @@ import numpy as np
 import seaborn as sns
 
 from agents import Drone
-from tracker import Tracker
 from model import Environment
+from tracker import Tracker
 
 
 def run_experiment(params, steps=50):
