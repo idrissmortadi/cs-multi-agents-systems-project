@@ -18,9 +18,8 @@ class MessagePerformative(Enum):
     INFORM_WASTE_POS_ADD_REF = 107
     INFORM_WASTE_POS_REMOVE_REF = 108
 
-    REQUEST_PAIRING = 109
-    ACCEPT_PAIRING = 110
-    REJECT_PAIRING = 111
+    REQUEST_DONATION = 109
+    ACCEPT_DONATION = 110
 
     def __str__(self):
         """Returns the name of the enum item."""

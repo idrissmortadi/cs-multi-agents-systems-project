@@ -3,11 +3,11 @@ import os
 import random
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Literal, Optional, Set, Tuple
 
 from communication import CommunicatingAgent, MessagePerformative
+from donor_logic import donor_logic
 from objects import Waste
-from pairing_logic import pairing_logic
 
 # Set random seed for reproducibility
 random.seed(42)
@@ -92,10 +92,7 @@ class DroneKnowledge:
 
     # Pairing-related attributes
     carried_waste_timeout: int = MAX_TIMEOUT_STEP
-    other_agent_with_extra_waste: Optional["Drone"] = None
-    paired_agent: Optional["Drone"] = None
-    pairing_status: Optional[str] = "unpaired"
-    rejected_by: Optional[List[int]] = field(default_factory=list)
+    donor_status: Literal["requesting", "idle"] = "idle"
 
     def __str__(self):
         inventory_str = [
@@ -119,7 +116,6 @@ class DroneKnowledge:
             f"\tActions: {self.actions},\n"
             f"\tVisitedCount: {len(self.visited_positions)}\n"  # Add visited count for brevity
             f"\tCarriedWasteTimeout: {self.carried_waste_timeout},\n"
-            f"\tOtherAgentWithExtraWaste: {self.other_agent_with_extra_waste},\n"
             f"\tPairedAgent: {self.paired_agent},\n"
             f"\tPairingStatus: {self.pairing_status},\n"
             f"\tRejectedBy: {self.rejected_by},\n"
@@ -656,7 +652,7 @@ class Drone(CommunicatingAgent):
         )
 
         # === Pairing Logic ===
-        pairing_logic(self, new_messages, MAX_TIMEOUT_STEP)
+        donor_logic(self, new_messages, MAX_TIMEOUT_STEP)
 
     def transform_waste(self):
         """
@@ -739,7 +735,7 @@ class Drone(CommunicatingAgent):
         # PRIORITY 0: No action
         if (
             self.knowledge.carried_waste_timeout == 0
-            and self.knowledge.other_agent_with_extra_waste is None
+            and self.knowledge.donor_status == "requesting"
         ):
             self.logger.info(
                 "NO ACTION: Expired carried waste timeout and no other agent with extra waste"
@@ -848,12 +844,12 @@ class Drone(CommunicatingAgent):
                     )
                     return "step_towards_target"
 
-        # PRIORITY 6: Ask other agents who have only one waste of the same color
-        if self.knowledge.other_agent_with_extra_waste:
+        # PRIORITY 6: Step towards paired agent
+        if self.knowledge.paired_agent:
             self.logger.info(
-                f"COLLECTION STAGE: Moving towards other agent with extra waste {self.knowledge.other_agent_with_extra_waste.unique_id}"
+                f"COLLECTION STAGE: Moving towards other agent with extra waste {self.knowledge.paired_agent.unique_id}"
             )
-            self.knowledge.target_pos = self.knowledge.other_agent_with_extra_waste.pos
+            self.knowledge.target_pos = self.knowledge.paired_agent.pos
             return "step_towards_target"
 
         # PRIORITY 6: SEARCH - No specific task, search by moving randomly
