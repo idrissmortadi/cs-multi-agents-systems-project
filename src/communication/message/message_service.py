@@ -39,6 +39,12 @@ class MessageService:
 
     def send_message(self, message):
         """Dispatch message if instant delivery active, otherwise add the message to proceed list."""
+        print(
+            f"MessageService: Sending message {message.get_performative()} from agent {message.get_exp()} to agent {message.get_dest()}"
+        )
+        print(
+            f"MessageService: Content: {message.get_content()} with exp {message.get_exp()}"
+        )
         if self.__instant_delivery:
             self.dispatch_message(message)
         else:
