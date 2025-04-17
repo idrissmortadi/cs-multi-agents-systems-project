@@ -471,9 +471,6 @@ class Drone(CommunicatingAgent):
             f"INVENTORY: Now carrying {len(self.knowledge.inventory)} items"
         )
 
-        if self.model.tracker:
-            self.logger.info("TRACKING: Reported waste drop event for tracking")
-
         return True
 
     def update(self):
@@ -653,18 +650,6 @@ class Drone(CommunicatingAgent):
         self.logger.info(
             f"TRANSFORM: Created new waste (ID: {processed_waste.unique_id}, type: {processed_waste.waste_color})"
         )
-
-        # Track the transformation event via the tracker if available.
-        if self.model.tracker:
-            self.model.tracker.track_waste(
-                waste_id=processed_waste.unique_id,
-                current_zone=processed_waste.waste_color,
-                status="transformed",
-                processor_id=self.unique_id,
-            )
-            self.logger.info(
-                f"TRANSFORM: Tracked transformation event for waste {processed_waste.unique_id}"
-            )
 
         # Move east after transforming
         self.knowledge.should_move_east = True

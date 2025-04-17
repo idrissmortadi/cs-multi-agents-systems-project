@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Optional
 
 from mesa import Model
 from mesa.datacollection import DataCollector
@@ -9,7 +8,6 @@ from mesa.space import MultiGrid
 from agents import Drone
 from communication.message.message_service import MessageService
 from objects import Waste, Zone
-from tracker import Tracker
 
 
 class Environment(Model):
@@ -24,7 +22,6 @@ class Environment(Model):
         width=9,
         height=9,
         seed=42,
-        tracker: Optional[Tracker] = None,
     ):
         super().__init__(seed=seed)
 
@@ -34,9 +31,6 @@ class Environment(Model):
         else:
             self.message_service = MessageService.get_instance()
             self.message_service.set_model(self)
-
-        # Add tracker
-        self.tracker = tracker
 
         # Clear old log files before setting up new ones
         self._clear_logs()
@@ -77,28 +71,20 @@ class Environment(Model):
                         and m._get_zone(a.pos).is_drop_zone
                     ]
                 ),
-                #     "avg_processing_time": lambda m: m.tracker.metrics[
-                #         "processing_efficiency"
-                #     ]["avg_processing_time"]
-                #     if m.tracker and "processing_efficiency" in m.tracker.metrics
-                #     else 0,
-                #     "avg_throughput": lambda m: m.tracker.metrics["system_metrics"][
-                #         "avg_throughput"
-                #     ]
-                #     if m.tracker and "system_metrics" in m.tracker.metrics
-                #     else 0,
-                #     "inventory_utilization": lambda m: sum(
-                #         [
-                #             len(a.knowledge["inventory"])
-                #             for a in m.grid.agents
-                #             if isinstance(a, Drone)
-                #         ]
-                #     ),
-                #     "avg_distance_per_agent": lambda m: m.tracker.metrics["agent_behavior"][
-                #         "avg_distance_per_agent"
-                #     ]
-                #     if m.tracker
-                #     else 0,
+                "wastes_not_in_drop_zone": lambda m: len(
+                    [
+                        a
+                        for a in m.grid.agents
+                        if isinstance(a, Waste) and a.pos[0] != m.grid.width - 1
+                    ]
+                ),
+                "wastes_in_inventories": lambda m: sum(
+                    [
+                        len(a.knowledge.inventory)
+                        for a in m.grid.agents
+                        if isinstance(a, Drone) and a.knowledge.inventory
+                    ]
+                ),
             },
             agent_reporters={},
         )
@@ -220,17 +206,6 @@ class Environment(Model):
                     f"Placed waste {a.unique_id} at position {pos} with color {zone_type}"
                 )
 
-                # Track initial waste state with tracker
-                if self.tracker:
-                    self.tracker.track_waste(
-                        waste_id=a.unique_id, current_zone=zone_type, status="created"
-                    )
-                    self.waste_state_changes[a.unique_id] = {
-                        "color": zone_type,
-                        "last_status": "created",
-                        "last_position": pos,
-                    }
-
     def _initialize_drones_by_zone(self, zone_type, num_drones, width, height):
         """Initialize the specified number of drones in a specific zone type"""
         zone_positions = []
@@ -285,120 +260,27 @@ class Environment(Model):
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
 
-    def track_waste_changes(self):
-        """Track changes in waste status and position"""
-        if not self.tracker:
-            return
-
-        # Get all waste objects
-        waste_objects = [
-            agent for agent in self.grid.agents if isinstance(agent, Waste)
-        ]
-
-        for waste in waste_objects:
-            waste_id = waste.unique_id
-            current_zone_agent = self._get_zone(waste.pos)
-            current_zone_type = (
-                current_zone_agent.zone_type if current_zone_agent else -1
-            )
-
-            # Check if waste is in drop zone and is red (completed)
-            is_completed = (
-                current_zone_agent
-                and current_zone_agent.is_drop_zone
-                and waste.waste_color == 2
-            )
-
-            # Determine current status
-            current_status = "completed" if is_completed else "active"
-
-            # Check if waste is new or has changed
-            if waste_id not in self.waste_state_changes:
-                # New waste that wasn't tracked at initialization
-                self.waste_state_changes[waste_id] = {
-                    "color": waste.waste_color,
-                    "last_status": current_status,
-                    "last_position": waste.pos,
-                }
-                self.tracker.track_waste(
-                    waste_id=waste_id,
-                    current_zone=current_zone_type,
-                    status=current_status,
-                )
-            else:
-                # Existing waste - check for changes
-                state = self.waste_state_changes[waste_id]
-
-                # If color changed, waste was transformed
-                if waste.waste_color != state["color"]:
-                    self.tracker.track_waste(
-                        waste_id=waste_id,
-                        current_zone=current_zone_type,
-                        status="transformed",
-                    )
-                    state["color"] = waste.waste_color
-                    state["last_status"] = "transformed"
-                # If status changed to completed
-                elif (
-                    current_status == "completed"
-                    and state["last_status"] != "completed"
-                ):
-                    self.tracker.track_waste(
-                        waste_id=waste_id,
-                        current_zone=current_zone_type,
-                        status="completed",
-                    )
-                    state["last_status"] = "completed"
-                # If position changed
-                elif waste.pos != state["last_position"]:
-                    self.tracker.track_waste(
-                        waste_id=waste_id,
-                        current_zone=current_zone_type,
-                        status="moved",
-                    )
-                    state["last_position"] = waste.pos
-
     def step(self):
-        self.tracker.calculate_metrics()
         self.datacollector.collect(self)
 
-        # self.logger.info("Starting a new step in the environment")
+        # Shuffle agents and execute their steps
         self.agents.shuffle_do("step_agent")
 
-        # Track waste changes after agents have acted
-        self.track_waste_changes()
+        # Check grid clean and all wastes treated when stationary
+        self._check_grid_clean_and_wastes_treated()
 
-        # Track metrics for each zone
-        if self.tracker:
-            step_data = {"step": self.steps}
-
-            # Count wastes by zone
-            for zone_type in range(3):
-                wastes_in_zone = len(
-                    [
-                        agent
-                        for agent in self.grid.agents
-                        if isinstance(agent, Waste)
-                        and self._get_zone(agent.pos)
-                        and self._get_zone(agent.pos).zone_type == zone_type
-                    ]
+    def _check_grid_clean_and_wastes_treated(self):
+        """Check if the grid is clean and all wastes are treated."""
+        model_vars = self.datacollector.get_model_vars_dataframe()
+        if not model_vars.empty:
+            wastes_not_in_drop_zone = model_vars["wastes_not_in_drop_zone"].iloc[-1]
+            wastes_in_inventories = model_vars["wastes_in_inventories"].iloc[-1]
+            if wastes_not_in_drop_zone == 0:
+                self.logger.info("Grid is clean: all wastes are in the drop zone.")
+            if wastes_in_inventories == 0:
+                self.logger.info(
+                    "All wastes have been treated: no wastes in inventories."
                 )
-                step_data[f"{zone_type}_zone_wastes"] = wastes_in_zone
-
-            # Count wastes in drop zone
-            wastes_in_drop = len(
-                [
-                    agent
-                    for agent in self.grid.agents
-                    if isinstance(agent, Waste)
-                    and agent.waste_color == 2
-                    and agent.pos[0] == self.grid.width - 1
-                ]
-            )
-            step_data["red_zone_wastes"] = wastes_in_drop
-
-            # Log the step data
-            self.tracker.log_result(step_data)
 
     def _get_zone(self, pos):
         cellmates = self.grid.get_cell_list_contents(pos)
@@ -415,7 +297,6 @@ class Environment(Model):
     def add_agent(self, agent, pos):
         self.grid.place_agent(agent, pos)
         self.num_agents += 1
-        # self.schedule.add(agent)
         self.logger.info(f"Added agent {agent.unique_id} at position {pos}")
 
     def get_agent_by_id(self, agent_id):
@@ -424,21 +305,9 @@ class Environment(Model):
 
     @staticmethod
     def do(drone: Drone, action: str) -> dict:
-        # Track the action before executing (to get the correct inventory state)
-        if drone.model.tracker:
-            drone.model.tracker.track_agent_movement(
-                agent_id=drone.unique_id,
-                position=drone.pos,
-                inventory_size=len(drone.knowledge.inventory),
-                action=action,
-            )
-
-        # Execute the action
+        # Removed call to track_agent_movement (not needed)
         getattr(drone, action)()
-
-        # Log the action
         drone.logger.info(f"Executing action: {action}")
-
         neighbors = drone.model.grid.get_neighborhood(
             drone.pos, moore=False, include_center=True
         )
@@ -457,22 +326,15 @@ class Environment(Model):
             for a in drone.model.grid.get_cell_list_contents(neighbors)
             if isinstance(a, Waste)
         ]
-
-        # Get the drone's current zone type
         drone_zone_type = drone.knowledge.zone_type
-
-        # Filter neighbors - only include cells that have the same zone type
         valid_neighbors_cells = []
         for pos in neighbors:
             zone_agent = neighbor_zones[neighbors.index(pos)]
             if zone_agent and zone_agent.zone_type <= drone_zone_type:
                 valid_neighbors_cells.append(pos)
-
-        # Calculate empty neighbors from the filtered list
         neighbors_cells_empty = set(valid_neighbors_cells) - set(
             [a.pos for a in neighbor_drones]
         )
-
         percepts = {
             "neighbors_empty": list(neighbors_cells_empty),
             "neighbor_zones": [(a.zone_type, a.pos) for a in neighbor_zones],
