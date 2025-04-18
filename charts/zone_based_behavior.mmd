@@ -1,0 +1,18 @@
+flowchart LR
+    ZoneBehavior["Zone-based Behavior"] --> Zone0
+    ZoneBehavior --> Zone1
+    ZoneBehavior --> Zone2
+    
+    Zone0["Zone 0 (Green)<br>- Collect green waste<br>- Transform to yellow<br>- Drop at transfer zone"]
+    
+    Zone1["Zone 1 (Yellow)<br>- Collect yellow waste<br>- Transform to red<br>- Drop at transfer zone"]
+    
+    Zone2["Zone 2 (Red)<br>- Collect red waste<br>- Move to drop zone<br>- Final disposal"]
+    
+    %% Special zone behaviors
+    TransferZone["Transfer Zones<br>- Located at zone boundaries<br>- Used to drop processed waste<br>- Reset movement flags"]
+    
+    DropZone["Drop Zone<br>- Final disposal area<br>- Located at eastern edge<br>- Only red drones deliver here"]
+    
+    ZoneBehavior --> TransferZone
+    ZoneBehavior --> DropZone

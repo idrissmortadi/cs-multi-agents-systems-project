@@ -1,0 +1,25 @@
+flowchart TD
+    Update["Update Knowledge Process"] --> U1["Process Mailbox Messages"]
+    Update --> U2["Check for Deadlock"]
+    Update --> U3["Detect & Broadcast Nearby Wastes"]
+    Update --> U4["Update Collective Memory"]
+    Update --> U5["Assign/Update Target Waste"]
+    Update --> U6["Check Zone Position"]
+    Update --> U7["Update Movement Flags"]
+    
+    %% Detailed processes
+    U1 --> U1a["Process waste addition messages"]
+    U1 --> U1b["Process waste removal messages"]
+    
+    U3 --> U3a["Broadcast detected waste positions"]
+    U3 --> U3b["Add to local memory"]
+    
+    U5 --> U5a["Find closest compatible waste"]
+    U5 --> U5b["Assign as target if not ignored"]
+    U5 --> U5c["Broadcast target to other drones"]
+    
+    U2 --> U2a["Check carry timeout<br>Decrement if carrying single waste"]
+    U2 --> U2b["Check if deadlocked<br>(timeout reached with single waste)"]
+
+
+

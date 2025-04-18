@@ -1,0 +1,143 @@
+base_params:
+  green_agents: 1
+  yellow_agents: 1
+  red_agents: 1
+  green_wastes: 8
+  yellow_wastes: 4
+  red_wastes: 2
+  width: 24
+  height: 12
+
+parameter_variations:
+  baseline: {}
+  waste_load_low:
+    green_wastes: 5
+    yellow_wastes: 5
+    red_wastes: 5
+  waste_load_medium:
+    green_wastes: 10
+    yellow_wastes: 10
+    red_wastes: 10
+  waste_load_high:
+    green_wastes: 20
+    yellow_wastes: 20
+    red_wastes: 20
+  high_green_agents:
+    green_agents: 6
+    yellow_agents: 1
+    red_agents: 1
+  high_yellow_agents:
+    green_agents: 1
+    yellow_agents: 6
+    red_agents: 1
+  high_red_agents:
+    green_agents: 1
+    yellow_agents: 1
+    red_agents: 6
+  balanced_agents_medium:
+    green_agents: 3
+    yellow_agents: 3
+    red_agents: 3
+  balanced_agents_high:
+    green_agents: 5
+    yellow_agents: 5
+    red_agents: 5
+  imbalanced_wastes_g_dominant:
+    green_wastes: 20
+    yellow_wastes: 5
+    red_wastes: 2
+  imbalanced_wastes_r_dominant:
+    green_wastes: 2
+    yellow_wastes: 5
+    red_wastes: 20
+  more_green_agents_less_green_waste:
+    green_agents: 6
+    green_wastes: 4
+  fewer_agents_more_waste:
+    green_agents: 1
+    yellow_agents: 1
+    red_agents: 1
+    green_wastes: 15
+    yellow_wastes: 15
+    red_wastes: 15
+  only_green_zone:
+    green_agents: 4
+    yellow_agents: 0
+    red_agents: 0
+    green_wastes: 20
+    yellow_wastes: 0
+    red_wastes: 0
+  only_yellow_zone:
+    green_agents: 0
+    yellow_agents: 4
+    red_agents: 0
+    green_wastes: 0
+    yellow_wastes: 20
+    red_wastes: 0
+  only_red_zone:
+    green_agents: 0
+    yellow_agents: 0
+    red_agents: 4
+    green_wastes: 0
+    yellow_wastes: 0
+    red_wastes: 20
+  unbalanced_agents_low_red:
+    green_agents: 3
+    yellow_agents: 3
+    red_agents: 1
+  unbalanced_agents_high_red:
+    green_agents: 2
+    yellow_agents: 2
+    red_agents: 6
+  high_agents_low_waste:
+    green_agents: 5
+    yellow_agents: 5
+    red_agents: 5
+    green_wastes: 2
+    yellow_wastes: 2
+    red_wastes: 2
+  low_agents_high_waste:
+    green_agents: 1
+    yellow_agents: 1
+    red_agents: 1
+    green_wastes: 20
+    yellow_wastes: 20
+    red_wastes: 20
+  opposite_balance:
+    green_agents: 5
+    yellow_agents: 2
+    red_agents: 1
+    green_wastes: 2
+    yellow_wastes: 10
+    red_wastes: 15
+  swap_balance:
+    green_agents: 2
+    yellow_agents: 5
+    red_agents: 3
+    green_wastes: 15
+    yellow_wastes: 4
+    red_wastes: 6
+  edge_case_empty_waste:
+    green_wastes: 0
+    yellow_wastes: 0
+    red_wastes: 0
+  edge_case_zero_red_agents:
+    red_agents: 0
+    red_wastes: 10
+  edge_case_zero_green_agents:
+    green_agents: 0
+    green_wastes: 12
+  conflicting_agents_vs_wastes:
+    green_agents: 5
+    yellow_agents: 1
+    red_agents: 2
+    green_wastes: 1
+    yellow_wastes: 10
+    red_wastes: 8
+  even_waste_unbalanced_agents:
+    green_agents: 1
+    yellow_agents: 4
+    red_agents: 2
+    green_wastes: 10
+    yellow_wastes: 10
+    red_wastes: 10

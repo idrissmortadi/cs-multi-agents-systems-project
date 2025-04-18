@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import yaml  # Add yaml import
 
 from model import Environment
 
@@ -27,6 +28,9 @@ def run_experiment(params, steps=500):
         seed=params["seed"],
         width=params["width"],
         height=params["height"],
+        agent_implementation=params[
+            "agent_implementation"
+        ],  # Pass agent implementation
     )
 
     # Run simulation
@@ -60,101 +64,39 @@ def run_experiment(params, steps=500):
     return df, last_active_step, stationary_vars
 
 
-def run_multiple_experiments(num_runs, parameter_variations):
+def run_multiple_experiments(
+    num_runs, base_params, parameter_variations, agent_implementations
+):
     """
-    Run multiple experiments with different parameters.
+    Run multiple experiments with different parameters for each agent implementation.
     Returns results and a list of dicts, one per run x benchmark, for reporting.
     """
-    base_params = {
-        "green_agents": 1,
-        "yellow_agents": 1,
-        "red_agents": 1,
-        "green_wastes": 8,
-        "yellow_wastes": 4,
-        "red_wastes": 2,
-        "width": 24,
-        "height": 12,
-    }
+    # base_params are now passed as an argument
+    # parameter_variations are now passed as an argument
 
     results = []
     run_infos = []
 
-    # Run with base parameters if no variations
-    if not parameter_variations:
-        exp_name = "baseline"
-        params = base_params.copy()
-        stationary_steps = []
-        for i in range(num_runs):
-            run_params = params.copy()
-            run_params["seed"] = i
-            df, last_active_step, stationary_vars = run_experiment(run_params)
-            results.append(df)
-            stationary_steps.append(last_active_step)
-            run_infos.append(
-                {
-                    "experiment": exp_name,
-                    "run": i + 1,
-                    **{
-                        k: params[k]
-                        for k in [
-                            "green_agents",
-                            "yellow_agents",
-                            "red_agents",
-                            "green_wastes",
-                            "yellow_wastes",
-                            "red_wastes",
-                            "width",
-                            "height",
-                        ]
-                    },
-                    "stationary_step": last_active_step,
-                    **stationary_vars,
-                }
-            )
-            print(f"Completed experiment {i + 1}/{num_runs} with base parameters")
-        # Add average row
-        avg_vars = {
-            k: np.mean([info[k] for info in run_infos if isinstance(info["run"], int)])
-            for k in stationary_vars
-        }
-        run_infos.append(
-            {
-                "experiment": exp_name,
-                "run": "avg",
-                **{
-                    k: params[k]
-                    for k in [
-                        "green_agents",
-                        "yellow_agents",
-                        "red_agents",
-                        "green_wastes",
-                        "yellow_wastes",
-                        "red_wastes",
-                        "width",
-                        "height",
-                    ]
-                },
-                "stationary_step": np.mean(stationary_steps),
-                **avg_vars,
-            }
-        )
-    else:
-        # Run with parameter variations
-        for variation_name, param_changes in parameter_variations.items():
+    for agent_impl in agent_implementations:
+        print(f"\n--- Running experiments for Agent Implementation: {agent_impl} ---")
+        # Run with base parameters if no variations
+        if not parameter_variations:
+            exp_name = f"baseline_{agent_impl}"  # Include agent impl in name
             params = base_params.copy()
-            params.update(param_changes)
+            params["agent_implementation"] = agent_impl  # Add agent impl to params
             stationary_steps = []
-            run_stationary_vars = []
+            run_stationary_vars_list = []  # Store stationary vars for each run
             for i in range(num_runs):
-                exp_params = params.copy()
-                exp_params["seed"] = i
-                df, last_active_step, stationary_vars = run_experiment(exp_params)
-                results.append((variation_name, df))
+                run_params = params.copy()
+                run_params["seed"] = i
+                df, last_active_step, stationary_vars = run_experiment(run_params)
+                results.append((exp_name, df))  # Store exp_name with df
                 stationary_steps.append(last_active_step)
-                run_stationary_vars.append(stationary_vars)
+                run_stationary_vars_list.append(stationary_vars)  # Append run's vars
                 run_infos.append(
                     {
-                        "experiment": variation_name,
+                        "experiment": exp_name,
+                        "agent_implementation": agent_impl,  # Add agent impl info
                         "run": i + 1,
                         **{
                             k: params[k]
@@ -173,15 +115,27 @@ def run_multiple_experiments(num_runs, parameter_variations):
                         **stationary_vars,
                     }
                 )
-                print(f"Completed experiment {i + 1}/{num_runs} with {variation_name}")
+                print(f"Completed experiment {i + 1}/{num_runs} for {exp_name}")
             # Add average row
-            avg_vars = {
-                k: np.mean([vars_[k] for vars_ in run_stationary_vars])
-                for k in run_stationary_vars[0]
-            }
+            if run_stationary_vars_list:  # Check if list is not empty
+                avg_vars = {
+                    k: np.mean(
+                        [
+                            vars_[k]
+                            for vars_ in run_stationary_vars_list
+                            if vars_ is not None and k in vars_
+                        ]
+                    )
+                    for k in run_stationary_vars_list[0]
+                    if run_stationary_vars_list[0] is not None
+                }
+            else:
+                avg_vars = {}
+
             run_infos.append(
                 {
-                    "experiment": variation_name,
+                    "experiment": exp_name,
+                    "agent_implementation": agent_impl,  # Add agent impl info
                     "run": "avg",
                     **{
                         k: params[k]
@@ -196,10 +150,95 @@ def run_multiple_experiments(num_runs, parameter_variations):
                             "height",
                         ]
                     },
-                    "stationary_step": np.mean(stationary_steps),
+                    "stationary_step": np.mean(stationary_steps)
+                    if stationary_steps
+                    else 0,
                     **avg_vars,
                 }
             )
+        else:
+            # Run with parameter variations
+            for variation_name, param_changes in parameter_variations.items():
+                exp_name = (
+                    f"{variation_name}_{agent_impl}"  # Include agent impl in name
+                )
+                params = base_params.copy()
+                params.update(param_changes)
+                params["agent_implementation"] = agent_impl  # Add agent impl to params
+                stationary_steps = []
+                run_stationary_vars_list = []  # Store stationary vars for each run
+                for i in range(num_runs):
+                    exp_params = params.copy()
+                    exp_params["seed"] = i
+                    df, last_active_step, stationary_vars = run_experiment(exp_params)
+                    results.append((exp_name, df))  # Store exp_name with df
+                    stationary_steps.append(last_active_step)
+                    run_stationary_vars_list.append(
+                        stationary_vars
+                    )  # Append run's vars
+                    run_infos.append(
+                        {
+                            "experiment": exp_name,
+                            "agent_implementation": agent_impl,  # Add agent impl info
+                            "run": i + 1,
+                            **{
+                                k: params[k]
+                                for k in [
+                                    "green_agents",
+                                    "yellow_agents",
+                                    "red_agents",
+                                    "green_wastes",
+                                    "yellow_wastes",
+                                    "red_wastes",
+                                    "width",
+                                    "height",
+                                ]
+                            },
+                            "stationary_step": last_active_step,
+                            **stationary_vars,
+                        }
+                    )
+                    print(f"Completed experiment {i + 1}/{num_runs} for {exp_name}")
+                # Add average row
+                if run_stationary_vars_list:  # Check if list is not empty
+                    avg_vars = {
+                        k: np.mean(
+                            [
+                                vars_[k]
+                                for vars_ in run_stationary_vars_list
+                                if vars_ is not None and k in vars_
+                            ]
+                        )
+                        for k in run_stationary_vars_list[0]
+                        if run_stationary_vars_list[0] is not None
+                    }
+                else:
+                    avg_vars = {}
+
+                run_infos.append(
+                    {
+                        "experiment": exp_name,
+                        "agent_implementation": agent_impl,  # Add agent impl info
+                        "run": "avg",
+                        **{
+                            k: params[k]
+                            for k in [
+                                "green_agents",
+                                "yellow_agents",
+                                "red_agents",
+                                "green_wastes",
+                                "yellow_wastes",
+                                "red_wastes",
+                                "width",
+                                "height",
+                            ]
+                        },
+                        "stationary_step": np.mean(stationary_steps)
+                        if stationary_steps
+                        else 0,
+                        **avg_vars,
+                    }
+                )
 
     return results, run_infos
 
@@ -209,6 +248,7 @@ def analyze_results(results: List[Tuple[str, pd.DataFrame]]):
     Analyze and compare results from multiple experiments.
     Plots all variables over time and determines steps to stationary state.
     For each variable, all runs are merged in a single plot with different shades.
+    Saves plots with experiment name (including agent implementation).
     """
     print("Analyzing results...")
 
@@ -225,13 +265,9 @@ def analyze_results(results: List[Tuple[str, pd.DataFrame]]):
     def prettify(varname):
         return varname.replace("_", " ").title()
 
-    # Organize results by experiment name
+    # Organize results by experiment name (which now includes agent impl)
     exp_dict = {}
-    for item in results:
-        if isinstance(item, tuple):
-            exp_name, df = item
-        else:
-            exp_name, df = "baseline", item
+    for exp_name, df in results:  # Directly unpack tuple
         exp_dict.setdefault(exp_name, []).append(df)
 
     for exp_name, runs in exp_dict.items():
@@ -252,7 +288,6 @@ def analyze_results(results: List[Tuple[str, pd.DataFrame]]):
             else:
                 last_active_step = 0
             stationary_steps.append(last_active_step)
-        max_stationary = max(stationary_steps)
 
         fig, axes = plt.subplots(
             nrows, ncols, figsize=(4 * ncols, 4 * nrows), squeeze=False
@@ -281,14 +316,16 @@ def analyze_results(results: List[Tuple[str, pd.DataFrame]]):
             ax.set_title(prettify(var))
             ax.set_xlabel("Step")
             ax.set_ylabel(prettify(var))
-            ax.set_xlim(0, max_stationary * 1.1)
+            ax.set_xlim(0, 600)
             ax.legend()
         # Hide unused subplots
         for k in range(num_vars, len(axes)):
             fig.delaxes(axes[k])
         plt.tight_layout()
         plt.suptitle(f"Experiment: {prettify(exp_name)}", y=1.02)
+        # Save plot with the full experiment name (including agent impl)
         plt.savefig(f"results/{exp_name}_plots.png", bbox_inches="tight")
+        plt.close(fig)  # Close the figure to free memory
 
 
 if __name__ == "__main__":
@@ -298,188 +335,71 @@ if __name__ == "__main__":
     if not os.path.exists("results"):
         os.makedirs("results")
 
-    # Define parameter variations to test
-    parameter_variations = {
-        "baseline": {},
-        "waste_load_low": {
-            "green_wastes": 5,
-            "yellow_wastes": 5,
-            "red_wastes": 5,
-        },
-        "waste_load_medium": {
-            "green_wastes": 10,
-            "yellow_wastes": 10,
-            "red_wastes": 10,
-        },
-        "waste_load_high": {
-            "green_wastes": 20,
-            "yellow_wastes": 20,
-            "red_wastes": 20,
-        },
-        "high_green_agents": {
-            "green_agents": 6,
-            "yellow_agents": 1,
-            "red_agents": 1,
-        },
-        "high_yellow_agents": {
-            "green_agents": 1,
-            "yellow_agents": 6,
-            "red_agents": 1,
-        },
-        "high_red_agents": {
-            "green_agents": 1,
-            "yellow_agents": 1,
-            "red_agents": 6,
-        },
-        "balanced_agents_medium": {
-            "green_agents": 3,
-            "yellow_agents": 3,
-            "red_agents": 3,
-        },
-        "balanced_agents_high": {
-            "green_agents": 5,
-            "yellow_agents": 5,
-            "red_agents": 5,
-        },
-        "imbalanced_wastes_g_dominant": {
-            "green_wastes": 20,
-            "yellow_wastes": 5,
-            "red_wastes": 2,
-        },
-        "imbalanced_wastes_r_dominant": {
-            "green_wastes": 2,
-            "yellow_wastes": 5,
-            "red_wastes": 20,
-        },
-        "more_green_agents_less_green_waste": {
-            "green_agents": 6,
-            "green_wastes": 4,
-        },
-        "fewer_agents_more_waste": {
-            "green_agents": 1,
-            "yellow_agents": 1,
-            "red_agents": 1,
-            "green_wastes": 15,
-            "yellow_wastes": 15,
-            "red_wastes": 15,
-        },
-        "only_green_zone": {
-            "green_agents": 4,
-            "yellow_agents": 0,
-            "red_agents": 0,
-            "green_wastes": 20,
-            "yellow_wastes": 0,
-            "red_wastes": 0,
-        },
-        "only_yellow_zone": {
-            "green_agents": 0,
-            "yellow_agents": 4,
-            "red_agents": 0,
-            "green_wastes": 0,
-            "yellow_wastes": 20,
-            "red_wastes": 0,
-        },
-        "only_red_zone": {
-            "green_agents": 0,
-            "yellow_agents": 0,
-            "red_agents": 4,
-            "green_wastes": 0,
-            "yellow_wastes": 0,
-            "red_wastes": 20,
-        },
-        "unbalanced_agents_low_red": {
-            "green_agents": 3,
-            "yellow_agents": 3,
-            "red_agents": 1,
-        },
-        "unbalanced_agents_high_red": {
-            "green_agents": 2,
-            "yellow_agents": 2,
-            "red_agents": 6,
-        },
-        "high_agents_low_waste": {
-            "green_agents": 5,
-            "yellow_agents": 5,
-            "red_agents": 5,
-            "green_wastes": 2,
-            "yellow_wastes": 2,
-            "red_wastes": 2,
-        },
-        "low_agents_high_waste": {
-            "green_agents": 1,
-            "yellow_agents": 1,
-            "red_agents": 1,
-            "green_wastes": 20,
-            "yellow_wastes": 20,
-            "red_wastes": 20,
-        },
-        "opposite_balance": {
-            "green_agents": 5,
-            "yellow_agents": 2,
-            "red_agents": 1,
-            "green_wastes": 2,
-            "yellow_wastes": 10,
-            "red_wastes": 15,
-        },
-        "swap_balance": {
-            "green_agents": 2,
-            "yellow_agents": 5,
-            "red_agents": 3,
-            "green_wastes": 15,
-            "yellow_wastes": 4,
-            "red_wastes": 6,
-        },
-        "edge_case_empty_waste": {
-            "green_wastes": 0,
-            "yellow_wastes": 0,
-            "red_wastes": 0,
-        },
-        "edge_case_zero_red_agents": {
-            "red_agents": 0,
-            "red_wastes": 10,
-        },
-        "edge_case_zero_green_agents": {
-            "green_agents": 0,
-            "green_wastes": 12,
-        },
-        "conflicting_agents_vs_wastes": {
-            "green_agents": 5,
-            "yellow_agents": 1,
-            "red_agents": 2,
-            "green_wastes": 1,
-            "yellow_wastes": 10,
-            "red_wastes": 8,
-        },
-        "even_waste_unbalanced_agents": {
-            "green_agents": 1,
-            "yellow_agents": 4,
-            "red_agents": 2,
-            "green_wastes": 10,
-            "yellow_wastes": 10,
-            "red_wastes": 10,
-        },
-    }
+    # Load parameters from YAML file
+    params_file_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "experiment_params.yaml",
+    )
+    with open(params_file_path, "r") as f:
+        all_params = yaml.safe_load(f)
 
-    # Run experiments with parameter variations
+    base_params = all_params["base_params"]
+    parameter_variations = all_params["parameter_variations"]
+
+    # Define agent implementations to test
+    agent_implementations_to_run = ["agents_with_comm", "agents_random_walk"]
+
+    # Run experiments with parameter variations for both implementations
     results, run_infos = run_multiple_experiments(
-        num_runs=3, parameter_variations=parameter_variations
+        num_runs=3,
+        base_params=base_params,  # Pass loaded base_params
+        parameter_variations=parameter_variations,  # Pass loaded variations
+        agent_implementations=agent_implementations_to_run,  # Pass implementations
     )
 
-    # Save run_infos as CSV: one line per run x benchmark
+    # Save run_infos as CSV: one line per run x benchmark (now includes agent_implementation column)
     df_infos = pd.DataFrame(run_infos)
     df_infos.to_csv("results/experiment_stationary_steps.csv", index=False)
 
-    # Bar plot for average stationary time per experiment
-    plt.figure(figsize=(2 * len(df_infos["experiment"].unique()), 4))
-    # Fix: compute average from rows where run == "avg"
-    avg_df = df_infos[df_infos["run"] == "avg"][["experiment", "stationary_step"]]
-    plt.bar(avg_df["experiment"], avg_df["stationary_step"], color="skyblue")
-    plt.ylabel("Average Stationary Time")
-    plt.xlabel("Experiment")
-    plt.title("Average Stationary Time per Experiment")
+    # --- Grouped Bar Plot for Average Stationary Time ---
+    # Filter for average rows
+    avg_df = df_infos[
+        df_infos["run"] == "avg"
+    ].copy()  # Use .copy() to avoid SettingWithCopyWarning
+
+    # Extract base variation name (remove the _agents or _agents_random suffix)
+    avg_df["variation"] = avg_df["experiment"].str.rsplit("_", n=1).str[0]
+
+    # Sort for consistent plotting order
+    avg_df = avg_df.sort_values(by=["variation", "agent_implementation"])
+
+    plt.figure(figsize=(12, 7))  # Adjust figure size as needed
+    ax = sns.barplot(
+        data=avg_df,
+        x="variation",
+        y="stationary_step",
+        hue="agent_implementation",
+        palette="viridis",
+        hue_order=[
+            "agents_with_comm",
+            "agents_random_walk",
+        ],  # Ensure consistent hue order
+    )
+
+    ax.set_title("Average Stationary Time per Experiment Variation", fontsize=16)
+    ax.set_xlabel("Experiment Variation", fontsize=12)
+    ax.set_ylabel("Average Stationary Time", fontsize=12)
+    ax.tick_params(
+        axis="x",
+        rotation=45,
+    )  # Rotate x-labels for better readability
+    plt.legend(title="Agent Implementation")
     plt.tight_layout()
-    plt.savefig("results/avg_stationary_time_barplot.png")
+    plt.savefig("results/avg_stationary_time_grouped_barplot.png")
+    plt.close()
+    # --- End Grouped Bar Plot ---
 
     # Analyze and compare results
-    print("Analyzing results...")
+    print("\nAnalyzing results...")
     analyze_results(results)
+    print("\nExperiment runs and analysis complete.")

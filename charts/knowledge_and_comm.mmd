@@ -1,0 +1,15 @@
+flowchart TD
+    Knowledge["Knowledge & Communication"] --> Percepts
+    Knowledge --> DroneKnowledge
+    Knowledge --> Communication
+    
+    Percepts["DronePercepts<br>- Empty neighbors<br>- Neighboring zones<br>- Neighboring drones<br>- Neighboring wastes"]
+    
+    DroneKnowledge["DroneKnowledge<br>- Inventory<br>- Movement flags<br>- Position history<br>- Collective waste memory<br>- Target position<br>- Deadlock status"]
+    
+    Communication --> Broadcast["Broadcast Messages<br>- New waste positions<br>- Removed waste positions<br>- Targeted waste claims"]
+    
+    Communication --> Receive["Receive Messages<br>- Update collective memory<br>- Remove claimed wastes<br>- Coordinate targeting"]
+    
+    Communication --> Memory["Memory Management<br>- Add discovered wastes<br>- Remove collected wastes<br>- Track visited positions<br>- Manage ignored wastes"]
+
