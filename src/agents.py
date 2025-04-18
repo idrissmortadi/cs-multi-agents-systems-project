@@ -9,7 +9,8 @@ from communication import CommunicatingAgent, MessagePerformative
 from objects import Waste
 
 # Set random seed for reproducibility
-random.seed(42)
+# random.seed(42)
+MAX_CARRY_TIMEOUT = 50  # Maximum carry timeout for waste
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -85,8 +86,11 @@ class DroneKnowledge:
         default_factory=set
     )
     target_pos: Optional[Tuple[int, int]] = None
-    current_state: Optional[str] = None
     visited_positions: Dict[Tuple[int, int], int] = field(default_factory=dict)
+
+    carry_timeout: int = MAX_CARRY_TIMEOUT
+    deadlock_status: str = "idle"  # Status of the drone
+    ignored_waste_positions: Set[Tuple[int, int]] = field(default_factory=set)
 
     def __str__(self):
         inventory_str = [
@@ -99,7 +103,6 @@ class DroneKnowledge:
         return (
             f"Knowledge(\n"
             f"\tZone: {self.zone_type},\n"
-            f"\tState: {self.current_state},\n"
             f"\tInventory: {inventory_str},\n"
             f"\tTarget: {self.target_pos},\n"
             f"\tMemory: {memory_str},\n"
@@ -109,6 +112,9 @@ class DroneKnowledge:
             f"\tInDropZone: {self.in_drop_zone},\n"
             f"\tActions: {self.actions},\n"
             f"\tVisitedCount: {len(self.visited_positions)}\n"  # Add visited count for brevity
+            f"\tCarryTimeout: {self.carry_timeout},\n"
+            f"\tStatus: {self.deadlock_status}\n"
+            f"\tIgnoredWastePositions: {self.ignored_waste_positions}\n"
             f")"
         )
 
@@ -336,6 +342,7 @@ class Drone(CommunicatingAgent):
         wastes_at_position = [
             (waste_id, waste_pos)
             for waste_id, waste_pos in self.percepts.neighbor_wastes
+            if waste_pos not in self.knowledge.ignored_waste_positions
             # if waste_pos == self.pos  # Ensure waste is at the current position
         ]
 
@@ -351,6 +358,9 @@ class Drone(CommunicatingAgent):
         self.logger.info(
             f"COLLECTION: Found {len(wastes_at_position)} waste(s) nearby, checking compatibility"
         )
+
+        self.knowledge.ignored_waste_positions.clear()
+        self.logger.info("COLLECTION: Cleared ignored waste positions")
 
         # Look for compatible waste
         for waste_id, waste_pos in wastes_at_position:
@@ -438,12 +448,16 @@ class Drone(CommunicatingAgent):
         )
 
         # Processed waste should be of the same type as the zone type + 1 or 2
+        # or we are in a deadlock situation
         assert (
             processed_waste.waste_color == self.knowledge.zone_type + 1
             or processed_waste.waste_color == 2
+            or self.is_deadlocked
         ), (
             f"Processed waste type {processed_waste.waste_color} does not match zone type {self.knowledge.zone_type + 1}"
         )
+
+        self.knowledge.carry_timeout = MAX_CARRY_TIMEOUT  # Reset carry timeout
 
         # Create a new waste object with the same type
         self.model.grid.place_agent(processed_waste, self.pos)
@@ -471,9 +485,6 @@ class Drone(CommunicatingAgent):
             f"INVENTORY: Now carrying {len(self.knowledge.inventory)} items"
         )
 
-        if self.model.tracker:
-            self.logger.info("TRACKING: Reported waste drop event for tracking")
-
         return True
 
     def update(self):
@@ -484,6 +495,18 @@ class Drone(CommunicatingAgent):
         # Initialize current position info
         self.logger.info(f"Current position: {self.pos}")
 
+        # Check carry timeout
+        if (
+            len(self.knowledge.inventory) == 1
+            and self.zone_type < 2
+            and self.knowledge.inventory[0].waste_color == self.zone_type
+            and self.knowledge.carry_timeout > 0
+        ):
+            self.knowledge.carry_timeout -= 1
+            self.logger.info(
+                f"TIMEOUT: Carry timeout decremented to {self.knowledge.carry_timeout}"
+            )
+
         # Process mailbox messages
         new_messages = self.get_new_messages()
         if new_messages:
@@ -491,8 +514,13 @@ class Drone(CommunicatingAgent):
         else:
             self.logger.info("MAILBOX: No new messages")
 
+        self._check_deadlock()
+
         # Process and broadcast nearby wastes
-        waste_count = len(self.percepts.neighbor_wastes)
+        wastes_to_process = [
+            set(self.percepts.neighbor_wastes) - self.knowledge.ignored_waste_positions
+        ]
+        waste_count = len(wastes_to_process)
         if waste_count > 0:
             self.logger.info(f"PERCEPTION: Detected {waste_count} waste(s) nearby")
             for waste_id, waste_pos in self.percepts.neighbor_wastes:
@@ -564,14 +592,26 @@ class Drone(CommunicatingAgent):
                     abs(wp[1][0] - self.pos[0]) + abs(wp[1][1] - self.pos[1])
                 ),
             )
-            self.knowledge.target_pos = closest_waste[1]
-            self.logger.info(
-                f"TARGETING: Assigned new target at {self.knowledge.target_pos} (color {closest_waste[0]})"
-            )
+
+            if closest_waste[1] not in self.knowledge.ignored_waste_positions:
+                self.knowledge.target_pos = closest_waste[1]
+                self.logger.info(
+                    f"TARGETING: Assigned new target at {self.knowledge.target_pos} (color {closest_waste[0]})"
+                )
+
+                # Remove from collective memory of other agents
+                self.send_broadcast_message(
+                    MessagePerformative.INFORM_WASTE_POS_REMOVE_REF,
+                    (closest_waste[0], closest_waste[1]),
+                )
+                self.logger.info(
+                    f"TARGETING Removed target waste (color {closest_waste[0]}, pos {closest_waste[1]}) "
+                    "from collective memory of other agents"
+                )
+
         elif not self.knowledge.collective_waste_memory:
             self.logger.info("TARGETING: No waste in memory, entering search mode")
             self.knowledge.target_pos = None
-            self.knowledge.current_state = "searching"
         elif self.knowledge.target_pos:
             self.logger.info(
                 f"TARGETING: Maintaining current target at {self.knowledge.target_pos}"
@@ -627,6 +667,13 @@ class Drone(CommunicatingAgent):
             f"MEMORY: Total items in collective memory: {len(self.knowledge.collective_waste_memory)}"
         )
 
+        # If reached target reset ignored waste positions
+        if self.knowledge.target_pos and self.knowledge.target_pos == self.pos:
+            self.knowledge.ignored_waste_positions.clear()
+            self.logger.info(
+                "TARGETING: Reset ignored waste positions after reaching target"
+            )
+
     def transform_waste(self):
         """
         Transform all waste in the inventory into a single processed waste item.
@@ -653,18 +700,6 @@ class Drone(CommunicatingAgent):
         self.logger.info(
             f"TRANSFORM: Created new waste (ID: {processed_waste.unique_id}, type: {processed_waste.waste_color})"
         )
-
-        # Track the transformation event via the tracker if available.
-        if self.model.tracker:
-            self.model.tracker.track_waste(
-                waste_id=processed_waste.unique_id,
-                current_zone=processed_waste.waste_color,
-                status="transformed",
-                processor_id=self.unique_id,
-            )
-            self.logger.info(
-                f"TRANSFORM: Tracked transformation event for waste {processed_waste.unique_id}"
-            )
 
         # Move east after transforming
         self.knowledge.should_move_east = True
@@ -697,6 +732,18 @@ class Drone(CommunicatingAgent):
         self.logger.info(f"\tKnowledge: {self.knowledge}")
         self.logger.info(f"\tPosition: {self.pos}")
         self.logger.info("==========================================")
+
+        # Deadlock situation
+        if self.is_deadlocked:
+            self.logger.info("DELIBERATION: Deadlock situation detected")
+            self.knowledge.target_pos = (
+                0,
+                0,
+                # random.randint(self.knowledge.grid_width) // (3 - self.zone_type),
+                # random.randint(self.knowledge.grid_height),
+            )
+            self.knowledge.ignored_waste_positions.add(self.pos)
+            return "drop_waste"
 
         # PRIORITY 1: DELIVERY - Check if we can drop waste in transfer zone or drop zone
         can_drop = (
@@ -753,13 +800,19 @@ class Drone(CommunicatingAgent):
                 inventory_types = [w.waste_color for w in self.knowledge.inventory]
 
                 # Check if waste is compatible with current inventory and drone type
-                if waste.waste_color == self.knowledge.zone_type and (
-                    not inventory_types or waste.waste_color in inventory_types
+                if (
+                    waste.waste_color == self.knowledge.zone_type
+                    and (not inventory_types or waste.waste_color in inventory_types)
+                    and waste.pos not in self.knowledge.ignored_waste_positions
                 ):
                     self.logger.info(
                         f"COLLECTION STAGE: Found compatible waste nearby at {waste_pos}"
                     )
                     return "pick_waste"
+                else:
+                    self.logger.info(
+                        f"COLLECTION STAGE: Waste at {waste_pos} is incompatible (color {waste.waste_color})"
+                    )
 
         # PRIORITY 5: TARGETED COLLECTION - Move towards target waste
         if self.knowledge.target_pos:
@@ -851,3 +904,15 @@ class Drone(CommunicatingAgent):
         ):
             return True
         return False
+
+    def _check_deadlock(self):
+        # ================ DEADLOCK CHECK ================
+        self.is_deadlocked = (
+            self.knowledge.carry_timeout <= 0
+            and self.zone_type < 2
+            and len(self.knowledge.inventory) == 1
+            and self.knowledge.inventory[0].waste_color == self.knowledge.zone_type
+        )
+
+        if not self.is_deadlocked:
+            return

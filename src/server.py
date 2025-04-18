@@ -4,12 +4,9 @@ from mesa.visualization import SolaraViz, make_plot_component, make_space_compon
 from agents import Drone
 from model import Environment
 from objects import COLORS_MAP, Waste, Zone
-from tracker import Tracker
 
 print(f"Mesa version: {mesa.__version__}")
 # sns.set_theme(style="whitegrid")
-
-tracker = Tracker("experiment_live")
 
 
 def agent_portrayal(agent: mesa.Agent):
@@ -84,7 +81,7 @@ model_params = {
     },
     "yellow_agents": {
         "type": "SliderInt",
-        "value": 1,
+        "value": 0,
         "label": "Number of yellow agents",
         "min": 0,
         "max": 100,
@@ -100,7 +97,7 @@ model_params = {
     },
     "green_wastes": {
         "type": "SliderInt",
-        "value": 8,
+        "value": 2,
         "label": "Number of green wastes",
         "min": 0,
         "max": 100,
@@ -138,7 +135,6 @@ model_params = {
         "max": 100,
         "step": 1,
     },
-    "tracker": tracker,
 }
 
 
@@ -151,7 +147,6 @@ model = Environment(
     red_wastes=model_params["red_wastes"]["value"],
     width=model_params["width"]["value"],
     height=model_params["height"]["value"],
-    tracker=tracker,
 )
 
 

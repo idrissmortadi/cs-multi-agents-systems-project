@@ -1,21 +1,20 @@
-import json
 import os
+from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 
-from agents import Drone
 from model import Environment
-from tracker import Tracker
+
+sns.set_theme(style="whitegrid")
 
 
-def run_experiment(params, steps=50):
+def run_experiment(params, steps=500):
     """
     Run a single experiment with given parameters
     """
-    # Create tracker for this experiment
-    tracker = Tracker(f"experiment_{params['seed']}")
 
     # Create model with tracker
     model = Environment(
@@ -26,250 +25,270 @@ def run_experiment(params, steps=50):
         yellow_wastes=params["yellow_wastes"],
         red_wastes=params["red_wastes"],
         seed=params["seed"],
-        tracker=tracker,
+        width=params["width"],
+        height=params["height"],
     )
 
     # Run simulation
     for _ in range(steps):
         model.step()
 
-        # After each step, record additional metrics about drones and wastes
-        # This would require adding hooks in the model.py to report to the tracker
-        for agent in model.agents:
-            if isinstance(agent, Drone):
-                tracker.track_agent_movement(
-                    agent.unique_id,
-                    agent.pos,
-                    len(agent.knowledge["inventory"]),
-                    agent.knowledge["actions"][-1]
-                    if agent.knowledge["actions"]
-                    else "none",
-                )
+    df = model.datacollector.get_model_vars_dataframe()
+    # Compute stationary step
+    diffs = df.diff().fillna(0)
+    activity = diffs.abs().sum(axis=1) > 0
+    if activity.any():
+        last_active_step = np.where(activity)[0][-1]
+    else:
+        last_active_step = 0
 
-    # Calculate metrics
-    tracker.calculate_metrics()
+    # Extract variable values at stationary step
+    stationary_vars = {}
+    for var in [
+        "green_wastes",
+        "yellow_wastes",
+        "red_wastes",
+        "wastes_in_drop_zone",
+        "wastes_not_in_drop_zone",
+        "wastes_in_inventories",
+    ]:
+        if var in df.columns:
+            stationary_vars[var] = df.iloc[last_active_step][var]
+        else:
+            stationary_vars[var] = None
 
-    # Log experiment parameters
-    tracker.log_experiment_params(params)
-
-    # Save results and metrics
-    tracker.save_results(f"results/experiment_{params['seed']}_steps.csv")
-    tracker.save_metrics(f"results/experiment_{params['seed']}_metrics.json")
-
-    return tracker
+    return df, last_active_step, stationary_vars
 
 
-def run_multiple_experiments(num_experiments=3, parameter_variations=None):
+def run_multiple_experiments(num_runs, parameter_variations):
     """
-    Run multiple experiments with different parameters
+    Run multiple experiments with different parameters.
+    Returns results and a list of dicts, one per run x benchmark, for reporting.
     """
     base_params = {
-        "green_agents": 4,
-        "yellow_agents": 2,
-        "red_agents": 2,
-        "green_wastes": 10,
-        "yellow_wastes": 3,
+        "green_agents": 1,
+        "yellow_agents": 1,
+        "red_agents": 1,
+        "green_wastes": 8,
+        "yellow_wastes": 4,
         "red_wastes": 2,
+        "width": 24,
+        "height": 12,
     }
 
     results = []
+    run_infos = []
 
     # Run with base parameters if no variations
     if not parameter_variations:
-        for i in range(num_experiments):
-            params = base_params.copy()
-            params["seed"] = i
-            tracker = run_experiment(params)
-            results.append(tracker)
-            print(
-                f"Completed experiment {i + 1}/{num_experiments} with base parameters"
+        exp_name = "baseline"
+        params = base_params.copy()
+        stationary_steps = []
+        for i in range(num_runs):
+            run_params = params.copy()
+            run_params["seed"] = i
+            df, last_active_step, stationary_vars = run_experiment(run_params)
+            results.append(df)
+            stationary_steps.append(last_active_step)
+            run_infos.append(
+                {
+                    "experiment": exp_name,
+                    "run": i + 1,
+                    **{
+                        k: params[k]
+                        for k in [
+                            "green_agents",
+                            "yellow_agents",
+                            "red_agents",
+                            "green_wastes",
+                            "yellow_wastes",
+                            "red_wastes",
+                            "width",
+                            "height",
+                        ]
+                    },
+                    "stationary_step": last_active_step,
+                    **stationary_vars,
+                }
             )
+            print(f"Completed experiment {i + 1}/{num_runs} with base parameters")
+        # Add average row
+        avg_vars = {
+            k: np.mean([info[k] for info in run_infos if isinstance(info["run"], int)])
+            for k in stationary_vars
+        }
+        run_infos.append(
+            {
+                "experiment": exp_name,
+                "run": "avg",
+                **{
+                    k: params[k]
+                    for k in [
+                        "green_agents",
+                        "yellow_agents",
+                        "red_agents",
+                        "green_wastes",
+                        "yellow_wastes",
+                        "red_wastes",
+                        "width",
+                        "height",
+                    ]
+                },
+                "stationary_step": np.mean(stationary_steps),
+                **avg_vars,
+            }
+        )
     else:
         # Run with parameter variations
         for variation_name, param_changes in parameter_variations.items():
             params = base_params.copy()
             params.update(param_changes)
-
-            for i in range(num_experiments):
+            stationary_steps = []
+            run_stationary_vars = []
+            for i in range(num_runs):
                 exp_params = params.copy()
                 exp_params["seed"] = i
-                tracker = run_experiment(exp_params)
-                results.append((variation_name, tracker))
-                print(
-                    f"Completed experiment {i + 1}/{num_experiments} with {variation_name}"
+                df, last_active_step, stationary_vars = run_experiment(exp_params)
+                results.append((variation_name, df))
+                stationary_steps.append(last_active_step)
+                run_stationary_vars.append(stationary_vars)
+                run_infos.append(
+                    {
+                        "experiment": variation_name,
+                        "run": i + 1,
+                        **{
+                            k: params[k]
+                            for k in [
+                                "green_agents",
+                                "yellow_agents",
+                                "red_agents",
+                                "green_wastes",
+                                "yellow_wastes",
+                                "red_wastes",
+                                "width",
+                                "height",
+                            ]
+                        },
+                        "stationary_step": last_active_step,
+                        **stationary_vars,
+                    }
                 )
+                print(f"Completed experiment {i + 1}/{num_runs} with {variation_name}")
+            # Add average row
+            avg_vars = {
+                k: np.mean([vars_[k] for vars_ in run_stationary_vars])
+                for k in run_stationary_vars[0]
+            }
+            run_infos.append(
+                {
+                    "experiment": variation_name,
+                    "run": "avg",
+                    **{
+                        k: params[k]
+                        for k in [
+                            "green_agents",
+                            "yellow_agents",
+                            "red_agents",
+                            "green_wastes",
+                            "yellow_wastes",
+                            "red_wastes",
+                            "width",
+                            "height",
+                        ]
+                    },
+                    "stationary_step": np.mean(stationary_steps),
+                    **avg_vars,
+                }
+            )
 
-    return results
+    return results, run_infos
 
 
-def analyze_results(results):
+def analyze_results(results: List[Tuple[str, pd.DataFrame]]):
     """
-    Analyze and compare results from multiple experiments
+    Analyze and compare results from multiple experiments.
+    Plots all variables over time and determines steps to stationary state.
+    For each variable, all runs are merged in a single plot with different shades.
     """
-    if not results:
-        print("No results to analyze")
-        return
+    print("Analyzing results...")
 
-    # If results contain parameter variations
-    if isinstance(results[0], tuple):
-        variation_metrics = {}
+    NUMBER_PLOT_COLS = 3  # Number of columns in the variable plots grid
 
-        # Group results by variation
-        for variation_name, tracker in results:
-            if variation_name not in variation_metrics:
-                variation_metrics[variation_name] = []
-            variation_metrics[variation_name].append(tracker.get_metrics())
+    # Color mapping for variables
+    base_colors = {
+        "green_wastes": "green",
+        "yellow_wastes": "gold",
+        "red_wastes": "red",
+        "wastes_in_drop_zone": "blue",
+    }
 
-        # Compare metrics across variations
-        comparison = {}
-        for variation_name, metrics_list in variation_metrics.items():
-            # Average metrics across runs with same parameters
-            avg_metrics = {}
-            for metric_category in metrics_list[0].keys():
-                if isinstance(metrics_list[0][metric_category], dict):
-                    avg_metrics[metric_category] = {}
-                    for metric_name, value in metrics_list[0][metric_category].items():
-                        if isinstance(value, (int, float)):
-                            avg_metrics[metric_category][metric_name] = np.mean(
-                                [m[metric_category][metric_name] for m in metrics_list]
-                            )
+    def prettify(varname):
+        return varname.replace("_", " ").title()
 
-            comparison[variation_name] = avg_metrics
+    # Organize results by experiment name
+    exp_dict = {}
+    for item in results:
+        if isinstance(item, tuple):
+            exp_name, df = item
+        else:
+            exp_name, df = "baseline", item
+        exp_dict.setdefault(exp_name, []).append(df)
 
-        # Save comparison to file
-        with open("results/parameter_comparison.json", "w") as f:
-            json.dump(comparison, f, indent=4)
+    for exp_name, runs in exp_dict.items():
+        print(f"\nExperiment: {exp_name}")
+        num_runs = len(runs)
+        variables = runs[0].columns
+        num_vars = len(variables)
+        ncols = NUMBER_PLOT_COLS
+        nrows = (num_vars + ncols - 1) // ncols
 
-        # Create comparison visualizations
-        plot_comparisons(comparison)
-    else:
-        # Simple case - just average metrics across runs with same parameters
-        all_metrics = [tracker.get_metrics() for tracker in results]
+        # Compute stationary steps for all runs
+        stationary_steps = []
+        for df in runs:
+            diffs = df.diff().fillna(0)
+            activity = diffs.abs().sum(axis=1) > 0
+            if activity.any():
+                last_active_step = np.where(activity)[0][-1]
+            else:
+                last_active_step = 0
+            stationary_steps.append(last_active_step)
+        max_stationary = max(stationary_steps)
 
-        avg_metrics = {}
-        for metric_category in all_metrics[0].keys():
-            avg_metrics[metric_category] = {}
-            for metric_name, value in all_metrics[0][metric_category].items():
-                if isinstance(value, (int, float)):
-                    avg_metrics[metric_category][metric_name] = np.mean(
-                        [m[metric_category][metric_name] for m in all_metrics]
-                    )
+        fig, axes = plt.subplots(
+            nrows, ncols, figsize=(4 * ncols, 4 * nrows), squeeze=False
+        )
+        axes = axes.flatten()
 
-        # Save average metrics
-        with open("results/average_metrics.json", "w") as f:
-            json.dump(avg_metrics, f, indent=4)
-
-
-def plot_comparisons(comparison):
-    """Create visualizations comparing different parameter settings"""
-    # Create directory for plots
-    if not os.path.exists("results/plots"):
-        os.makedirs("results/plots")
-
-    # Use Seaborn style
-    sns.set_theme(style="whitegrid")
-
-    # List of key metrics to plot
-    key_metrics = [
-        ("system_metrics", "total_processed"),
-        ("system_metrics", "avg_throughput"),
-        ("processing_efficiency", "avg_processing_time"),
-        ("agent_behavior", "avg_idle_percentage"),
-    ]
-
-    # Create a bar chart for each key metric
-    for category, metric in key_metrics:
-        values = []
-        labels = []
-
-        for variation_name, metrics in comparison.items():
-            if category in metrics and metric in metrics[category]:
-                values.append(metrics[category][metric])
-                labels.append(variation_name)
-
-        if values:
-            plt.figure(figsize=(10, 6))
-            sns.barplot(x=labels, y=values, palette="viridis")
-            plt.title(f"{category} - {metric.replace('_', ' ').capitalize()}")
-            plt.ylabel(metric.replace("_", " ").capitalize())
-            plt.xlabel("Parameter Variations")
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            plt.savefig(f"results/plots/{category}_{metric}.png")
-            plt.close()
-
-    # Additional plots for deeper analysis
-    # Plot clearance rates for each zone
-    if "zone_performance" in next(iter(comparison.values())):
-        for zone in ["zone_0", "zone_1", "zone_2"]:
-            clearance_rates = []
-            labels = []
-
-            for variation_name, metrics in comparison.items():
-                if zone in metrics["zone_performance"]:
-                    clearance_rates.append(
-                        metrics["zone_performance"][zone].get("clearance_rate", 0)
-                    )
-                    labels.append(variation_name)
-
-            if clearance_rates:
-                plt.figure(figsize=(10, 6))
-                sns.barplot(x=labels, y=clearance_rates, palette="coolwarm")
-                plt.title(f"Clearance Rate - {zone.replace('_', ' ').capitalize()}")
-                plt.ylabel("Clearance Rate")
-                plt.xlabel("Parameter Variations")
-                plt.xticks(rotation=45)
-                plt.tight_layout()
-                plt.savefig(f"results/plots/clearance_rate_{zone}.png")
-                plt.close()
-
-    # Plot congestion levels for each zone
-    for zone in ["zone_0", "zone_1", "zone_2"]:
-        congestion_levels = []
-        labels = []
-
-        for variation_name, metrics in comparison.items():
-            if zone in metrics["zone_performance"]:
-                congestion_levels.append(
-                    metrics["zone_performance"][zone].get("congestion_level", 0)
+        for j, var in enumerate(variables):
+            ax = axes[j]
+            base_color = base_colors.get(var, "gray")
+            for i, df in enumerate(runs):
+                alpha = 0.4 + 0.6 * (i / max(1, num_runs - 1))
+                ax.plot(
+                    df.index,
+                    df[var],
+                    label=f"Run {i + 1}",
+                    color=base_color,
+                    alpha=alpha,
                 )
-                labels.append(variation_name)
-
-        if congestion_levels:
-            plt.figure(figsize=(10, 6))
-            sns.barplot(x=labels, y=congestion_levels, palette="magma")
-            plt.title(f"Congestion Level - {zone.replace('_', ' ').capitalize()}")
-            plt.ylabel("Congestion Level")
-            plt.xlabel("Parameter Variations")
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            plt.savefig(f"results/plots/congestion_level_{zone}.png")
-            plt.close()
-
-    # Plot bottleneck scores for each zone
-    if "system_metrics" in next(iter(comparison.values())):
-        bottleneck_scores = {"green_zone": [], "yellow_zone": [], "red_zone": []}
-        labels = []
-
-        for variation_name, metrics in comparison.items():
-            if "bottleneck_score" in metrics["system_metrics"]:
-                for zone in bottleneck_scores.keys():
-                    bottleneck_scores[zone].append(
-                        metrics["system_metrics"]["bottleneck_score"].get(zone, 0)
-                    )
-                labels.append(variation_name)
-
-        for zone, scores in bottleneck_scores.items():
-            if scores:
-                plt.figure(figsize=(10, 6))
-                sns.barplot(x=labels, y=scores, palette="cubehelix")
-                plt.title(f"Bottleneck Score - {zone.replace('_', ' ').capitalize()}")
-                plt.ylabel("Bottleneck Score")
-                plt.xlabel("Parameter Variations")
-                plt.xticks(rotation=45)
-                plt.tight_layout()
-                plt.savefig(f"results/plots/bottleneck_score_{zone}.png")
-                plt.close()
+                # Draw stationary line for this run
+                ax.axvline(
+                    stationary_steps[i],
+                    color=base_color,
+                    linestyle="--",
+                    alpha=alpha * 0.7,
+                )
+            ax.set_title(prettify(var))
+            ax.set_xlabel("Step")
+            ax.set_ylabel(prettify(var))
+            ax.set_xlim(0, max_stationary * 1.1)
+            ax.legend()
+        # Hide unused subplots
+        for k in range(num_vars, len(axes)):
+            fig.delaxes(axes[k])
+        plt.tight_layout()
+        plt.suptitle(f"Experiment: {prettify(exp_name)}", y=1.02)
+        plt.savefig(f"results/{exp_name}_plots.png", bbox_inches="tight")
 
 
 if __name__ == "__main__":
@@ -281,46 +300,186 @@ if __name__ == "__main__":
 
     # Define parameter variations to test
     parameter_variations = {
-        "baseline": {},  # Base parameters
-        "more_green_agents": {"green_agents": 6},
-        "more_yellow_agents": {"yellow_agents": 4},
-        "more_red_agents": {"red_agents": 4},
-        "equal_distribution": {"green_agents": 3, "yellow_agents": 3, "red_agents": 3},
-        "high_waste_load": {"green_wastes": 20, "yellow_wastes": 6, "red_wastes": 4},
+        "baseline": {},
+        "waste_load_low": {
+            "green_wastes": 5,
+            "yellow_wastes": 5,
+            "red_wastes": 5,
+        },
+        "waste_load_medium": {
+            "green_wastes": 10,
+            "yellow_wastes": 10,
+            "red_wastes": 10,
+        },
+        "waste_load_high": {
+            "green_wastes": 20,
+            "yellow_wastes": 20,
+            "red_wastes": 20,
+        },
+        "high_green_agents": {
+            "green_agents": 6,
+            "yellow_agents": 1,
+            "red_agents": 1,
+        },
+        "high_yellow_agents": {
+            "green_agents": 1,
+            "yellow_agents": 6,
+            "red_agents": 1,
+        },
+        "high_red_agents": {
+            "green_agents": 1,
+            "yellow_agents": 1,
+            "red_agents": 6,
+        },
+        "balanced_agents_medium": {
+            "green_agents": 3,
+            "yellow_agents": 3,
+            "red_agents": 3,
+        },
+        "balanced_agents_high": {
+            "green_agents": 5,
+            "yellow_agents": 5,
+            "red_agents": 5,
+        },
+        "imbalanced_wastes_g_dominant": {
+            "green_wastes": 20,
+            "yellow_wastes": 5,
+            "red_wastes": 2,
+        },
+        "imbalanced_wastes_r_dominant": {
+            "green_wastes": 2,
+            "yellow_wastes": 5,
+            "red_wastes": 20,
+        },
+        "more_green_agents_less_green_waste": {
+            "green_agents": 6,
+            "green_wastes": 4,
+        },
+        "fewer_agents_more_waste": {
+            "green_agents": 1,
+            "yellow_agents": 1,
+            "red_agents": 1,
+            "green_wastes": 15,
+            "yellow_wastes": 15,
+            "red_wastes": 15,
+        },
+        "only_green_zone": {
+            "green_agents": 4,
+            "yellow_agents": 0,
+            "red_agents": 0,
+            "green_wastes": 20,
+            "yellow_wastes": 0,
+            "red_wastes": 0,
+        },
+        "only_yellow_zone": {
+            "green_agents": 0,
+            "yellow_agents": 4,
+            "red_agents": 0,
+            "green_wastes": 0,
+            "yellow_wastes": 20,
+            "red_wastes": 0,
+        },
+        "only_red_zone": {
+            "green_agents": 0,
+            "yellow_agents": 0,
+            "red_agents": 4,
+            "green_wastes": 0,
+            "yellow_wastes": 0,
+            "red_wastes": 20,
+        },
+        "unbalanced_agents_low_red": {
+            "green_agents": 3,
+            "yellow_agents": 3,
+            "red_agents": 1,
+        },
+        "unbalanced_agents_high_red": {
+            "green_agents": 2,
+            "yellow_agents": 2,
+            "red_agents": 6,
+        },
+        "high_agents_low_waste": {
+            "green_agents": 5,
+            "yellow_agents": 5,
+            "red_agents": 5,
+            "green_wastes": 2,
+            "yellow_wastes": 2,
+            "red_wastes": 2,
+        },
+        "low_agents_high_waste": {
+            "green_agents": 1,
+            "yellow_agents": 1,
+            "red_agents": 1,
+            "green_wastes": 20,
+            "yellow_wastes": 20,
+            "red_wastes": 20,
+        },
+        "opposite_balance": {
+            "green_agents": 5,
+            "yellow_agents": 2,
+            "red_agents": 1,
+            "green_wastes": 2,
+            "yellow_wastes": 10,
+            "red_wastes": 15,
+        },
+        "swap_balance": {
+            "green_agents": 2,
+            "yellow_agents": 5,
+            "red_agents": 3,
+            "green_wastes": 15,
+            "yellow_wastes": 4,
+            "red_wastes": 6,
+        },
+        "edge_case_empty_waste": {
+            "green_wastes": 0,
+            "yellow_wastes": 0,
+            "red_wastes": 0,
+        },
+        "edge_case_zero_red_agents": {
+            "red_agents": 0,
+            "red_wastes": 10,
+        },
+        "edge_case_zero_green_agents": {
+            "green_agents": 0,
+            "green_wastes": 12,
+        },
+        "conflicting_agents_vs_wastes": {
+            "green_agents": 5,
+            "yellow_agents": 1,
+            "red_agents": 2,
+            "green_wastes": 1,
+            "yellow_wastes": 10,
+            "red_wastes": 8,
+        },
+        "even_waste_unbalanced_agents": {
+            "green_agents": 1,
+            "yellow_agents": 4,
+            "red_agents": 2,
+            "green_wastes": 10,
+            "yellow_wastes": 10,
+            "red_wastes": 10,
+        },
     }
 
     # Run experiments with parameter variations
-    results = run_multiple_experiments(
-        num_experiments=3, parameter_variations=parameter_variations
+    results, run_infos = run_multiple_experiments(
+        num_runs=3, parameter_variations=parameter_variations
     )
 
-    # Analyze and compare results
-    analyze_results(results)
+    # Save run_infos as CSV: one line per run x benchmark
+    df_infos = pd.DataFrame(run_infos)
+    df_infos.to_csv("results/experiment_stationary_steps.csv", index=False)
 
-    print("\nExperiment Summary:")
-    if isinstance(results[0], tuple):
-        for variation_name, tracker in results:
-            metrics = tracker.get_metrics()
-            print(f"\n{variation_name}:")
-            print(
-                f"  Total processed waste: {metrics['system_metrics']['total_processed']}"
-            )
-            print(
-                f"  Average throughput: {metrics['system_metrics']['avg_throughput']:.2f} items/step"
-            )
-            print(
-                f"  Bottleneck scores: {metrics['system_metrics']['bottleneck_score']}"
-            )
-            print(
-                f"  Average processing time: {metrics['processing_efficiency']['avg_processing_time']:.2f} steps"
-            )
-    else:
-        for i, tracker in enumerate(results):
-            metrics = tracker.get_metrics()
-            print(f"\nExperiment {i}:")
-            print(
-                f"  Total processed waste: {metrics['system_metrics']['total_processed']}"
-            )
-            print(
-                f"  Average throughput: {metrics['system_metrics']['avg_throughput']:.2f} items/step"
-            )
+    # Bar plot for average stationary time per experiment
+    plt.figure(figsize=(2 * len(df_infos["experiment"].unique()), 4))
+    # Fix: compute average from rows where run == "avg"
+    avg_df = df_infos[df_infos["run"] == "avg"][["experiment", "stationary_step"]]
+    plt.bar(avg_df["experiment"], avg_df["stationary_step"], color="skyblue")
+    plt.ylabel("Average Stationary Time")
+    plt.xlabel("Experiment")
+    plt.title("Average Stationary Time per Experiment")
+    plt.tight_layout()
+    plt.savefig("results/avg_stationary_time_barplot.png")
+
+    # Analyze and compare results
+    print("Analyzing results...")
+    analyze_results(results)
