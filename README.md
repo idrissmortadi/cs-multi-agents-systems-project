@@ -39,6 +39,9 @@ The project utilizes Python's built-in `logging` module to provide detailed insi
 
 The project focuses on a multi-agent system designed to optimize the collection and processing of waste materials in a simulated environment. The system is composed of drone agents that operate in different zones, each with its own processing capabilities. The goal is to efficiently manage the waste collection and processing pipeline, ensuring that materials are refined and transferred through various stages.
 
+### Metric and Goal
+Our goal is to minimize the number of steps to clean the environment.
+
 ### System Overview
 
 The system consists of drone agents assigned to specific zones, each responsible for collecting, processing, and transferring waste materials through a pipeline of increasing refinement.
