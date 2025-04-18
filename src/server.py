@@ -1,16 +1,20 @@
 import mesa
 from mesa.visualization import SolaraViz, make_plot_component, make_space_component
 
-from agents import Drone
 from model import Environment
-from objects import COLORS_MAP, Waste, Zone
+from objects import COLORS_MAP
 
 print(f"Mesa version: {mesa.__version__}")
 # sns.set_theme(style="whitegrid")
 
 
+# Update agent_portrayal to use class names instead of isinstance and ensure portrayal is always initialized
+
+
 def agent_portrayal(agent: mesa.Agent):
-    if isinstance(agent, Waste):
+    portrayal = {}  # Initialize portrayal to avoid UnboundLocalError
+
+    if agent.__class__.__name__ == "Waste":
         WASTES_COLOR_MAP = {
             0: "#00FF00",
             1: "yellow",
@@ -26,9 +30,8 @@ def agent_portrayal(agent: mesa.Agent):
             "marker": WASTES_MARKER_MAP.get(agent.waste_color, "o"),
             "color": WASTES_COLOR_MAP.get(agent.waste_color, "black"),
             "zorder": 101,
-            # "size": 100,
         }
-    elif isinstance(agent, Drone):
+    elif agent.__class__.__name__ == "Drone":
         AGENT_COLOR_MAP = {
             0: "#00FF00",
             1: "#FFFF00",
@@ -38,15 +41,13 @@ def agent_portrayal(agent: mesa.Agent):
             "color": AGENT_COLOR_MAP.get(agent.zone_type, "purple"),
             "marker": "o",
             "zorder": 100,
-            # "size": 500,
         }
-    elif isinstance(agent, Zone):
+    elif agent.__class__.__name__ == "Zone":
         if agent.is_drop_zone:
             portrayal = {
                 "marker": "s",
                 "color": "#990000",
                 "zorder": 99,
-                # "size": 1000,
             }
         else:
             if (
@@ -58,15 +59,14 @@ def agent_portrayal(agent: mesa.Agent):
                     "marker": "s",
                     "color": COLORS_MAP[agent.zone_type],
                     "zorder": 99,
-                    # "size": 1000,
                 }
             else:
                 portrayal = {
                     "marker": "s",
                     "color": "white",
                     "zorder": 99,
-                    # "size": 1000,
                 }
+
     return portrayal
 
 
@@ -135,8 +135,19 @@ model_params = {
         "max": 100,
         "step": 1,
     },
+    "agent_implementation": {
+        "type": "Select",
+        "value": "agents",
+        "values": ["agents", "agents_random"],
+        "label": "Agent Implementation",
+    },
 }
 
+selected_agent_module = model_params["agent_implementation"]["value"]
+if selected_agent_module == "agents_random":
+    pass
+else:
+    pass
 
 model = Environment(
     green_agents=model_params["green_agents"]["value"],
@@ -147,6 +158,7 @@ model = Environment(
     red_wastes=model_params["red_wastes"]["value"],
     width=model_params["width"]["value"],
     height=model_params["height"]["value"],
+    agent_implementation=model_params["agent_implementation"]["value"],
 )
 
 

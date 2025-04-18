@@ -1,0 +1,25 @@
+flowchart TD
+    Deliberate["Deliberation Process<br>(Priority-based)"] --> D0{"Deadlock<br>Detected?"}
+    D0 -- "Yes" --> A0["Return drop_waste<br>(Emergency dumping)"]
+    
+    D0 -- "No" --> D1{"Can drop waste<br>in transfer/drop zone?"}
+    D1 -- "Yes" --> A1["Return drop_waste"]
+    
+    D1 -- "No" --> D2{"Inventory full<br>(2 items)?"}
+    D2 -- "Yes" --> A2["Return transform_waste"]
+    
+    D2 -- "No" --> D3{"Should move east<br>with processed waste?"}
+    D3 -- "Yes" --> A3["Return move_east"]
+    
+    D3 -- "No" --> D4{"Compatible waste<br>nearby to pick?"}
+    D4 -- "Yes" --> A4["Return pick_waste"]
+    
+    D4 -- "No" --> D5{"Have target<br>waste position?"}
+    D5 -- "Yes" --> D5_1{"Reached<br>target?"}
+    D5_1 -- "Yes" --> A5_1["Reset target<br>Try to pick"]
+    D5_1 -- "No" --> A5_2["Return step_towards_target"]
+    
+    D5 -- "No" --> A6["Return move_randomly"]
+
+
+deliberatoin

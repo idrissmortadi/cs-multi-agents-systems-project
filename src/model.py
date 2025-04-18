@@ -5,7 +5,7 @@ from mesa import Model
 from mesa.datacollection import DataCollector
 from mesa.space import MultiGrid
 
-from agents import Drone
+from agents_random import Drone
 from communication.message.message_service import MessageService
 from objects import Waste, Zone
 
@@ -22,8 +22,17 @@ class Environment(Model):
         width=9,
         height=9,
         seed=None,
+        agent_implementation="agents",
     ):
         super().__init__(seed=seed)
+
+        # Dynamically import the selected agent implementation
+        if agent_implementation == "agents_random":
+            from agents_random import Drone
+        else:
+            from agents import Drone
+
+        self.Drone = Drone
 
         if MessageService.get_instance() is None:
             self.message_service = MessageService(self)
@@ -45,28 +54,28 @@ class Environment(Model):
                     [
                         a
                         for a in m.grid.agents
-                        if isinstance(a, Waste) and a.waste_color == 0
+                        if a.__class__.__name__ == "Waste" and a.waste_color == 0
                     ]
                 ),
                 "yellow_wastes": lambda m: len(
                     [
                         a
                         for a in m.grid.agents
-                        if isinstance(a, Waste) and a.waste_color == 1
+                        if a.__class__.__name__ == "Waste" and a.waste_color == 1
                     ]
                 ),
                 "red_wastes": lambda m: len(
                     [
                         a
                         for a in m.grid.agents
-                        if isinstance(a, Waste) and a.waste_color == 2
+                        if a.__class__.__name__ == "Waste" and a.waste_color == 2
                     ]
                 ),
                 "wastes_in_drop_zone": lambda m: len(
                     [
                         a
                         for a in m.grid.agents
-                        if isinstance(a, Waste)
+                        if a.__class__.__name__ == "Waste"
                         and a.waste_color == 2
                         and m._get_zone(a.pos).is_drop_zone
                     ]
@@ -75,14 +84,15 @@ class Environment(Model):
                     [
                         a
                         for a in m.grid.agents
-                        if isinstance(a, Waste) and a.pos[0] != m.grid.width - 1
+                        if a.__class__.__name__ == "Waste"
+                        and a.pos[0] != m.grid.width - 1
                     ]
                 ),
                 "wastes_in_inventories": lambda m: sum(
                     [
                         len(a.knowledge.inventory)
                         for a in m.grid.agents
-                        if isinstance(a, Drone) and a.knowledge.inventory
+                        if a.__class__.__name__ == "Drone" and a.knowledge.inventory
                     ]
                 ),
             },
@@ -222,7 +232,7 @@ class Environment(Model):
         for _ in range(num_drones):
             if zone_positions:
                 pos = self.random.choice(zone_positions)
-                a = Drone(self, zone_type)
+                a = self.Drone(self, zone_type)
                 self.grid.place_agent(a, pos)
                 self.logger.info(
                     f"Placed drone {a.unique_id} at position {pos} in zone type {zone_type}"
@@ -285,7 +295,7 @@ class Environment(Model):
     def _get_zone(self, pos):
         cellmates = self.grid.get_cell_list_contents(pos)
         for agent in cellmates:
-            if isinstance(agent, Zone):
+            if agent.__class__.__name__ == "Zone":
                 return agent
         return None
 
@@ -314,17 +324,17 @@ class Environment(Model):
         neighbor_zones = [
             a
             for a in drone.model.grid.get_cell_list_contents(neighbors)
-            if isinstance(a, Zone)
+            if a.__class__.__name__ == "Zone"
         ]
         neighbor_drones = [
             a
             for a in drone.model.grid.get_cell_list_contents(neighbors)
-            if isinstance(a, Drone)
+            if a.__class__.__name__ == "Drone"
         ]
         neighbor_wastes = [
             a
             for a in drone.model.grid.get_cell_list_contents(neighbors)
-            if isinstance(a, Waste)
+            if a.__class__.__name__ == "Waste"
         ]
         drone_zone_type = drone.knowledge.zone_type
         valid_neighbors_cells = []

@@ -17,9 +17,29 @@ conda activate SMA
 solara run src/server.py
 ```
 
+### Run automated experiments
+
+```bash
+python src/run_experiments.py
+```
+
+Results are saved in the `results` folder.
+
+### Logging System
+
+The project utilizes Python's built-in `logging` module to provide detailed insights into the simulation and agent behavior.
+
+- **Agent-Specific Logs:** Each drone agent generates its own log file located in the `logs/agents/` directory, named `agent_<unique_id>.log`. This allows for tracing the actions, decisions, perceptions, and communication of individual agents.
+- **Log Format:** Log messages include a timestamp, the agent's unique ID, the logging level (e.g., INFO, WARNING), the agent's zone type, and the specific log message detailing the event or state.
+- **Purpose:** These logs are invaluable for debugging, understanding the step-by-step execution of agent logic (perception, update, deliberation, action), and analyzing emergent behaviors within the multi-agent system.
+
 ## Multi-Agent Waste Processing System
 
-### Agent Overview
+### Proplem Statement
+
+The project focuses on a multi-agent system designed to optimize the collection and processing of waste materials in a simulated environment. The system is composed of drone agents that operate in different zones, each with its own processing capabilities. The goal is to efficiently manage the waste collection and processing pipeline, ensuring that materials are refined and transferred through various stages.
+
+### System Overview
 
 The system consists of drone agents assigned to specific zones, each responsible for collecting, processing, and transferring waste materials through a pipeline of increasing refinement.
 
@@ -31,248 +51,329 @@ The drones are specialized by zone type (0, 1, 2), which corresponds to differen
 - **Yellow Zone Drones (zone_type=1)**: Second-stage processors
 - **Red Zone Drones (zone_type=2)**: Final-stage processors
 
-### Agent Architecture
+### Special terms
 
-Each drone maintains:
+- **Zone type**: Number representing the type of processing zone (0, 1, 2) corresponding to the color of the zone (green, yellow, red).
+- **Zone**: A specific area in the simulation where agents operate and process waste materials. The size of the zone is third of the total size of the simulation area.
+- **Waste**: The materials collected by agents which can have one of three types: green, yellow, or red. Each type corresponds to a specific stage in the processing pipeline.
+- **Transfer** zone: A designated area where agents can transfer waste materials to other agents or zones for further processing. It is the area separating the zones from each other.
+- **Drop zone**: A designated area where agents can drop off waste materials after processing. It is the last column of the simulation area.
+- **Deadlock**: A situation where agents are stuck with only one waste type and cannot proceed to the next stage of processing for a long time.
 
-- **Percepts**: Current environmental observations
-  - Empty neighboring cells
-  - Nearby zones, drones, and waste objects
-- **Knowledge**: Internal state and memory
-  - Inventory (max capacity: 2 waste items)
-  - Processing flags and action history
-  - Zone and position awareness
+## Agent Implementations
 
-### Decision Making Process
+### Random Agent
 
-Drones follow a deliberation cycle with priority-based decision making:
+The drone agent operates within a specific zone based on its type (Green, Yellow, or Red). Its main goal is to find and collect waste matching its zone type.
 
-1. **Update knowledge** based on current percepts
-2. **Deliberate** to select the next action
-3. **Execute** the chosen action
+It is a basic agent implementation that operates randomly:
 
-#### Action Priority Hierarchy
+- **Movement:** The agent moves randomly to an adjacent, unoccupied cell in each step.
+- **Waste Collection:** If the agent encounters a waste item in its current cell, it picks it up, provided it has capacity.
+- **Delivery:** When the agent is carrying two waste items, it navigates towards the nearest deposit zone to deliver them.
 
-1. **Transform waste** when inventory is full (2 items) for green/yellow drones
-2. **Drop waste** when:
-   - At a transfer zone with processed waste (zone boundaries)
-   - At the final drop zone for red drones
-3. **Move eastward** after transforming waste or when carrying processed waste
-4. **Pick up waste** when:
-   - Compatible waste is present
-   - Inventory has capacity
-   - Drone is allowed to pick (compatibility rules)
-5. **Default**: Random movement to explore the environment
+### Agent with Communication and Coordination
 
-### Zone-Based Strategy
+It uses communication to share waste locations with other drones and targets the closest known compatible waste. If it finds waste nearby, it picks it up (up to two items).
 
-- **Spatial Organization**: The grid is divided into three zones (left to right)
-- **Transfer Zones**: Special boundary regions where drones transfer waste to the next zone
-- **Drop Zone**: Eastmost column where final processed waste is deposited
+Green and Yellow drones transform two collected wastes into the next higher type and move east to drop them in a transfer zone. Red drones collect red waste and move east to drop it in the final drop zone.
 
-### Waste Processing Pipeline
+If no waste is targeted or nearby, the drone searches by moving to less visited areas.
 
-1. **Collection**: Drones gather waste matching their zone type
-2. **Transformation**: When inventory is full, waste is transformed into a higher-level type
-3. **Transportation**: Processed waste is moved eastward to transfer/drop zones
-4. **Transfer/Deposit**: Waste is dropped for the next processing stage or final deposit
+It also has a mechanism to detect and handle deadlock situations where it might be stuck carrying incompatible waste for too long.
 
-### Agent Collaboration
+### Visual Representations of Behavior of Agents with Communication and Coordination
 
-The system demonstrates emergence through specialized roles and implicit coordination:
+To better understand the system, the following diagrams illustrate various aspects of the multi-agent waste processing system:
 
-- First-stage drones process raw materials
-- Second-stage drones process intermediate materials
-- Final-stage drones complete the processing pipeline
+#### 1. Agent Cycle
 
-This creates an efficient waste management system without explicit communication between agents.
+![Agent Cycle](images/agent_cycle.png)
 
-### Performance Metrics
+#### 2. Update Process
 
-1. **Processing Efficiency**
-   - Time to process waste from raw to final state
-   - Number of complete waste transformations per time step
-   - Average inventory utilization rate per drone
+![Update Process](images/update_process.png)
 
-2. **Zone Performance**
-   - Waste accumulation rate per zone
-   - Transfer zone congestion levels
-   - Zone clearance rate (waste items processed/total waste in zone)
+#### 3. Deliberation Process
 
-3. **System-wide Metrics**
-   - Total waste processed to completion
-   - Average processing pipeline throughput
-   - System bottleneck identification:
+![Deliberation Process](images/deliberation_process.png)
 
-    ```python
-     def calculate_bottleneck_score(zone_stats):
-         return {
-             'green_zone': processed_items / total_items,
-             'yellow_zone': processed_items / received_items,
-             'red_zone': deposited_items / received_items
-         }
-    ```
+#### 4. Action Implementations
 
-4. **Agent Behavior Metrics**
-   - Average distance traveled per waste item processed
-   - Collision/blocking incidents between drones
-   - Idle time percentage per drone
+![Action Implementations](images/action_implementations.png)
 
-These metrics can be tracked over time to optimize the system's parameters and evaluate different strategies.
+#### 5. Knowledge and Communication
 
-### Detailed Performance Metrics Explanation
+![Knowledge and Communication](images/knowledge_and_comm.png)
 
-#### 1. Processing Efficiency
+#### 6. Zone-Based Behavior
 
-- **Average Processing Time:**  
-  Formula:  
-  $$
-  \text{Average Processing Time} = \frac{\sum (\text{completed\_step} - \text{created\_step})}{\text{Total Waste Items Processed}}
-  $$  
-  Pseudo-code:
-  
-```python
-  processing_times = [
-      waste["completed_step"] - waste["created_step"]
-      for waste in waste_tracking.values()
-      if "completed_step" in waste
-  ]
-  avg_processing_time = sum(processing_times) / len(processing_times)
-  ```
+![Zone-Based Behavior](images/zone_based_behavior.png)
 
-- **Transformations Per Step:**  
-  Formula:  
-  $$
-  \text{Transformations Per Step} = \frac{\text{Total Transformations}}{\text{Total Simulation Steps}}
-  $$  
-  Pseudo-code:
-  
-```python
-  transformations_per_step = sum(transformations.values()) / total_steps
-  ```
+## Running Experiments and Results
 
-- **Average Inventory Utilization:**  
-  Formula:  
-  $$
-  \text{Average Inventory Utilization} = \frac{\sum (\text{Inventory Size})}{\text{Total Actions} \times \text{Max Inventory Capacity}}
-  $$  
-  Pseudo-code:
-  
-```python
-  avg_inventory_utilization = sum(inventory_sizes) / (len(inventory_sizes) * 2)
-  ```
+To evaluate and compare the performance of different agent implementations and parameter settings, we use the `src/run_experiments.py` script.
 
-#### 2. Zone Performance
+### Methodology
 
-- **Waste Accumulation Rate:**  
-  Formula:  
-  $$
-  \text{Accumulation Rate} = \frac{\text{Waste Items in Zone}}{\text{Simulation Steps}}
-  $$  
-  Pseudo-code:
-  
-```python
-  accumulation_rate = sum(zone_accumulation) / len(zone_accumulation)
-  ```
+1. **Configuration:** Experiments are configured using the `experiment_params.yaml` file. This file defines:
+    - `base_params`: Default parameters for the environment (grid size, initial number of agents and wastes).
+    - `parameter_variations`: Specific parameter sets to test against the baseline, allowing for systematic exploration of the parameter space (e.g., varying the number of agents or wastes).
+2. **Agent Implementations:** The script is designed to run experiments for multiple agent implementations. Currently, it compares:
+    - `agents_with_comm`: The primary implementation featuring communication and coordinated behavior.
+    - `agents_random_walk`: The baseline random agent described above.
+3. **Multiple Runs:** For each combination of parameter variation and agent implementation, the script executes multiple runs (defaulting to 3) with different random seeds to ensure robustness of the results.
+4. **Data Collection:** During each simulation run, the `Mesa` DataCollector tracks key model variables over time, such as the number of wastes of each color, wastes in the drop zone, and wastes carried by agents.
+5. **Stationary State Analysis:** For each run, the script calculates the "stationary step" – the time step after which the system's key metrics stabilize. This provides a measure of how quickly the system reaches an equilibrium state.
 
-- **Zone Clearance Rate:**  
-  Formula:  
-  $$
-  \text{Clearance Rate} = \frac{\sum (\text{Negative Changes in Waste Count})}{\text{Total Changes}}
-  $$  
-  Pseudo-code:
-  
-```python
-  clearance_rate = sum(change for change in changes if change < 0) / len(changes)
-  ```
+### Output
 
-- **Transfer Zone Congestion Level:**  
-  Formula:  
-  $$
-  \text{Congestion Level} = \frac{\text{Max Waste in Transfer Zone}}{\text{Scaling Factor}}
-  $$  
-  Pseudo-code:
-  
-```python
-  congestion_level = max(zone_accumulation) / 10
-  ```
+The `run_experiments.py` script generates the following outputs in the `results/` directory:
 
-#### 3. System-wide Metrics
+- **Time Series Plots (`results/<experiment_name>_plots.png`):** For each experiment configuration (parameter variation + agent implementation), a plot is generated showing the evolution of all tracked variables over time across all runs. Dashed lines indicate the calculated stationary step for each run.
+- **Stationary Steps Summary (`results/experiment_stationary_steps.csv`):** A CSV file summarizing the configuration, stationary step, and final waste counts for each individual run, along with averaged results per experiment configuration.
+- **Average Stationary Time Comparison (`results/avg_stationary_time_grouped_barplot.png`):** A bar plot comparing the average stationary time across different parameter variations, grouped by agent implementation. This allows for easy visual comparison of performance under various conditions.
 
-- **Total Waste Processed:**  
-  Formula:  
-  $$
-  \text{Total Waste Processed} = \text{Count of Waste Items with Completed Status}
-  $$  
-  Pseudo-code:
-  
-```python
-  total_processed = sum(1 for waste in waste_tracking.values() if "completed_step" in waste)
-  ```
+These results enable a quantitative comparison of how different agent strategies and environmental parameters affect the system's efficiency and dynamics.
 
-- **Average Throughput:**  
-  Formula:  
-  $$
-  \text{Average Throughput} = \frac{\text{Total Waste Processed}}{\text{Total Simulation Steps}}
-  $$  
-  Pseudo-code:
-  
-```python
-  avg_throughput = total_processed / total_steps
-  ```
+## Results
 
-- **Bottleneck Score:**  
-  Formula:  
-  $$
-  \text{Bottleneck Score (Zone)} = \frac{\text{Processed Items in Zone}}{\text{Total Items Entering Zone}}
-  $$  
-  Pseudo-code:
-  
-```python
-  bottleneck_score = {
-      "green_zone": green_processed / max(1, green_total),
-      "yellow_zone": yellow_processed / max(1, yellow_received),
-      "red_zone": red_deposited / max(1, red_received),
-  }
-  ```
+The table showcases the results of the experiments conducted with different agent implementations and parameter variations. Each row represents a unique experiment configuration, detailing the number of agents, waste types, and various metrics collected at **the end** of the simulation.
 
-#### 4. Agent Behavior Metrics
+- experiment: Name of the experiment.
+- agent_implementation: The type of agent implementation used in the experiment, either `agents_with_comm` or `agents_random_walk`.
+- run: The run number for the experiment (1, 2, 3, or avg for average).
+- green_agents: Number of green agents in the experiment.
+- yellow_agents: Number of yellow agents in the experiment.
+- red_agents: Number of red agents in the experiment.
+- green_wastes: Number of green wastes in the experiment.
+- yellow_wastes: Number of yellow wastes in the experiment.
+- red_wastes: Number of red wastes in the experiment.
+- width: Width of the simulation area.
+- height: Height of the simulation area.
+- stationary_step: The time step at which the system reached a stationary state.
+- wastes_in_drop_zone: Number of wastes in the drop zone at the end of the simulation.
+- wastes_not_in_drop_zone: Number of wastes not in the drop zone at the end of the simulation.
+- wastes_in_inventories: Number of wastes in the inventories of agents at the end of the simulation.
 
-- **Average Distance Traveled Per Agent:**  
-  Formula:  
-  $$
-  \text{Average Distance} = \frac{\sum (\text{Manhattan Distance Between Consecutive Positions})}{\text{Total Agents}}
-  $$  
-  Pseudo-code:
-  
-```python
-  distance = sum(
-      abs(pos[i][0] - pos[i-1][0]) + abs(pos[i][1] - pos[i-1][1])
-      for i in range(1, len(positions))
-  )
-  avg_distance = distance / total_agents
-  ```
 
-- **Collision/Blocking Incidents:**  
-  Formula:  
-  $$
-  \text{Collisions} = \text{Count of Overlapping Positions Between Agents}
-  $$  
-  Pseudo-code:
-  
-```python
-  collisions = sum(1 for pos in positions if pos in occupied_positions)
-  ```
+|     | experiment                                            | agent_implementation   | run   |   green_agents |   yellow_agents |   red_agents |   green_wastes |   yellow_wastes |   red_wastes |   width |   height |   stationary_step |   wastes_in_drop_zone_end |   wastes_not_in_drop_zone_end |   wastes_in_inventories_end |
+|----:|:------------------------------------------------------|:-----------------------|:------|---------------:|----------------:|-------------:|---------------:|----------------:|-------------:|--------:|---------:|------------------:|----------------------:|--------------------------:|------------------------:|
+|   0 | baseline_agents_with_comm                             | agents_with_comm       | 1     |              1 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          157      |               6       |                  0        |                0        |
+|   1 | baseline_agents_with_comm                             | agents_with_comm       | 2     |              1 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          149      |               6       |                  0        |                0        |
+|   2 | baseline_agents_with_comm                             | agents_with_comm       | 3     |              1 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          207      |               6       |                  0        |                0        |
+|   3 | baseline_agents_with_comm                             | agents_with_comm       | avg   |              1 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          171      |               6       |                  0        |                0        |
+|   4 | waste_load_low_agents_with_comm                       | agents_with_comm       | 1     |              1 |               1 |            1 |       1        |        1        |      8       |      24 |       12 |          214      |               8       |                  2        |                0        |
+|   5 | waste_load_low_agents_with_comm                       | agents_with_comm       | 2     |              1 |               1 |            1 |       1        |        1        |      8       |      24 |       12 |          176      |               8       |                  2        |                0        |
+|   6 | waste_load_low_agents_with_comm                       | agents_with_comm       | 3     |              1 |               1 |            1 |       1        |        1        |      8       |      24 |       12 |          155      |               8       |                  2        |                0        |
+|   7 | waste_load_low_agents_with_comm                       | agents_with_comm       | avg   |              1 |               1 |            1 |       1        |        1        |      8       |      24 |       12 |          181.667  |               8       |                  2        |                0        |
+|   8 | waste_load_medium_agents_with_comm                    | agents_with_comm       | 1     |              1 |               1 |            1 |       0        |        1        |     17       |      24 |       12 |          250      |              17       |                  1        |                0        |
+|   9 | waste_load_medium_agents_with_comm                    | agents_with_comm       | 2     |              1 |               1 |            1 |       0        |        1        |     17       |      24 |       12 |          232      |              15       |                  3        |                0        |
+|  10 | waste_load_medium_agents_with_comm                    | agents_with_comm       | 3     |              1 |               1 |            1 |       0        |        1        |     17       |      24 |       12 |          235      |              17       |                  1        |                0        |
+|  11 | waste_load_medium_agents_with_comm                    | agents_with_comm       | avg   |              1 |               1 |            1 |       0        |        1        |     17       |      24 |       12 |          239      |              16.3333  |                  1.66667  |                0        |
+|  12 | waste_load_high_agents_with_comm                      | agents_with_comm       | 1     |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          466      |              35       |                  0        |                0        |
+|  13 | waste_load_high_agents_with_comm                      | agents_with_comm       | 2     |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          441      |              33       |                  2        |                0        |
+|  14 | waste_load_high_agents_with_comm                      | agents_with_comm       | 3     |              1 |               1 |            1 |       0        |        0        |     34       |      24 |       12 |          488      |              34       |                  0        |                1        |
+|  15 | waste_load_high_agents_with_comm                      | agents_with_comm       | avg   |              1 |               1 |            1 |       0        |        0        |     34.6667  |      24 |       12 |          465      |              34       |                  0.666667 |                0.333333 |
+|  16 | high_green_agents_agents_with_comm                    | agents_with_comm       | 1     |              6 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          363      |               6       |                  0        |                0        |
+|  17 | high_green_agents_agents_with_comm                    | agents_with_comm       | 2     |              6 |               1 |            1 |       1        |        1        |      5       |      24 |       12 |          498      |               5       |                  2        |                1        |
+|  18 | high_green_agents_agents_with_comm                    | agents_with_comm       | 3     |              6 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          340      |               6       |                  0        |                0        |
+|  19 | high_green_agents_agents_with_comm                    | agents_with_comm       | avg   |              6 |               1 |            1 |       0.333333 |        0.333333 |      5.66667 |      24 |       12 |          400.333  |               5.66667 |                  0.666667 |                0.333333 |
+|  20 | high_yellow_agents_agents_with_comm                   | agents_with_comm       | 1     |              1 |               6 |            1 |       0        |        0        |      6       |      24 |       12 |          406      |               6       |                  0        |                0        |
+|  21 | high_yellow_agents_agents_with_comm                   | agents_with_comm       | 2     |              1 |               6 |            1 |       0        |        0        |      5       |      24 |       12 |          486      |               5       |                  0        |                2        |
+|  22 | high_yellow_agents_agents_with_comm                   | agents_with_comm       | 3     |              1 |               6 |            1 |       0        |        0        |      6       |      24 |       12 |          212      |               6       |                  0        |                0        |
+|  23 | high_yellow_agents_agents_with_comm                   | agents_with_comm       | avg   |              1 |               6 |            1 |       0        |        0        |      5.66667 |      24 |       12 |          368      |               5.66667 |                  0        |                0.666667 |
+|  24 | high_red_agents_agents_with_comm                      | agents_with_comm       | 1     |              1 |               1 |            6 |       0        |        0        |      6       |      24 |       12 |          159      |               6       |                  0        |                0        |
+|  25 | high_red_agents_agents_with_comm                      | agents_with_comm       | 2     |              1 |               1 |            6 |       0        |        0        |      6       |      24 |       12 |          156      |               6       |                  0        |                0        |
+|  26 | high_red_agents_agents_with_comm                      | agents_with_comm       | 3     |              1 |               1 |            6 |       0        |        0        |      6       |      24 |       12 |          160      |               6       |                  0        |                0        |
+|  27 | high_red_agents_agents_with_comm                      | agents_with_comm       | avg   |              1 |               1 |            6 |       0        |        0        |      6       |      24 |       12 |          158.333  |               6       |                  0        |                0        |
+|  28 | balanced_agents_medium_agents_with_comm               | agents_with_comm       | 1     |              3 |               3 |            3 |       0        |        0        |      6       |      24 |       12 |           98      |               6       |                  0        |                0        |
+|  29 | balanced_agents_medium_agents_with_comm               | agents_with_comm       | 2     |              3 |               3 |            3 |       0        |        0        |      6       |      24 |       12 |          135      |               6       |                  0        |                0        |
+|  30 | balanced_agents_medium_agents_with_comm               | agents_with_comm       | 3     |              3 |               3 |            3 |       0        |        0        |      6       |      24 |       12 |          194      |               6       |                  0        |                0        |
+|  31 | balanced_agents_medium_agents_with_comm               | agents_with_comm       | avg   |              3 |               3 |            3 |       0        |        0        |      6       |      24 |       12 |          142.333  |               6       |                  0        |                0        |
+|  32 | balanced_agents_high_agents_with_comm                 | agents_with_comm       | 1     |              5 |               5 |            5 |       0        |        0        |      6       |      24 |       12 |          321      |               6       |                  0        |                0        |
+|  33 | balanced_agents_high_agents_with_comm                 | agents_with_comm       | 2     |              5 |               5 |            5 |       0        |        0        |      6       |      24 |       12 |          194      |               6       |                  0        |                0        |
+|  34 | balanced_agents_high_agents_with_comm                 | agents_with_comm       | 3     |              5 |               5 |            5 |       0        |        0        |      6       |      24 |       12 |          223      |               6       |                  0        |                0        |
+|  35 | balanced_agents_high_agents_with_comm                 | agents_with_comm       | avg   |              5 |               5 |            5 |       0        |        0        |      6       |      24 |       12 |          246      |               6       |                  0        |                0        |
+|  36 | imbalanced_wastes_g_dominant_agents_with_comm         | agents_with_comm       | 1     |              1 |               1 |            1 |       0        |        1        |      9       |      24 |       12 |          223      |               9       |                  1        |                0        |
+|  37 | imbalanced_wastes_g_dominant_agents_with_comm         | agents_with_comm       | 2     |              1 |               1 |            1 |       0        |        1        |      9       |      24 |       12 |          279      |               9       |                  1        |                0        |
+|  38 | imbalanced_wastes_g_dominant_agents_with_comm         | agents_with_comm       | 3     |              1 |               1 |            1 |       0        |        1        |      9       |      24 |       12 |          216      |               9       |                  1        |                0        |
+|  39 | imbalanced_wastes_g_dominant_agents_with_comm         | agents_with_comm       | avg   |              1 |               1 |            1 |       0        |        1        |      9       |      24 |       12 |          239.333  |               9       |                  1        |                0        |
+|  40 | imbalanced_wastes_r_dominant_agents_with_comm         | agents_with_comm       | 1     |              1 |               1 |            1 |       0        |        0        |     23       |      24 |       12 |          335      |              23       |                  0        |                0        |
+|  41 | imbalanced_wastes_r_dominant_agents_with_comm         | agents_with_comm       | 2     |              1 |               1 |            1 |       0        |        0        |     23       |      24 |       12 |          472      |              23       |                  0        |                0        |
+|  42 | imbalanced_wastes_r_dominant_agents_with_comm         | agents_with_comm       | 3     |              1 |               1 |            1 |       0        |        0        |     23       |      24 |       12 |          243      |              23       |                  0        |                0        |
+|  43 | imbalanced_wastes_r_dominant_agents_with_comm         | agents_with_comm       | avg   |              1 |               1 |            1 |       0        |        0        |     23       |      24 |       12 |          350      |              23       |                  0        |                0        |
+|  44 | more_green_agents_less_green_waste_agents_with_comm   | agents_with_comm       | 1     |              6 |               1 |            1 |       0        |        0        |      5       |      24 |       12 |          320      |               5       |                  0        |                0        |
+|  45 | more_green_agents_less_green_waste_agents_with_comm   | agents_with_comm       | 2     |              6 |               1 |            1 |       0        |        0        |      5       |      24 |       12 |          202      |               5       |                  0        |                0        |
+|  46 | more_green_agents_less_green_waste_agents_with_comm   | agents_with_comm       | 3     |              6 |               1 |            1 |       0        |        0        |      5       |      24 |       12 |          116      |               4       |                  1        |                0        |
+|  47 | more_green_agents_less_green_waste_agents_with_comm   | agents_with_comm       | avg   |              6 |               1 |            1 |       0        |        0        |      5       |      24 |       12 |          212.667  |               4.66667 |                  0.333333 |                0        |
+|  48 | fewer_agents_more_waste_agents_with_comm              | agents_with_comm       | 1     |              1 |               1 |            1 |       1        |        0        |     26       |      24 |       12 |          406      |              26       |                  1        |                0        |
+|  49 | fewer_agents_more_waste_agents_with_comm              | agents_with_comm       | 2     |              1 |               1 |            1 |       1        |        0        |     26       |      24 |       12 |          491      |              26       |                  1        |                0        |
+|  50 | fewer_agents_more_waste_agents_with_comm              | agents_with_comm       | 3     |              1 |               1 |            1 |       1        |        0        |     26       |      24 |       12 |          368      |              25       |                  2        |                0        |
+|  51 | fewer_agents_more_waste_agents_with_comm              | agents_with_comm       | avg   |              1 |               1 |            1 |       1        |        0        |     26       |      24 |       12 |          421.667  |              25.6667  |                  1.33333  |                0        |
+|  52 | only_green_zone_agents_with_comm                      | agents_with_comm       | 1     |              4 |               0 |            0 |       0        |       10        |      0       |      24 |       12 |          107      |               0       |                 10        |                0        |
+|  53 | only_green_zone_agents_with_comm                      | agents_with_comm       | 2     |              4 |               0 |            0 |       0        |       10        |      0       |      24 |       12 |          102      |               0       |                 10        |                0        |
+|  54 | only_green_zone_agents_with_comm                      | agents_with_comm       | 3     |              4 |               0 |            0 |       0        |       10        |      0       |      24 |       12 |          175      |               0       |                 10        |                0        |
+|  55 | only_green_zone_agents_with_comm                      | agents_with_comm       | avg   |              4 |               0 |            0 |       0        |       10        |      0       |      24 |       12 |          128      |               0       |                 10        |                0        |
+|  56 | only_yellow_zone_agents_with_comm                     | agents_with_comm       | 1     |              0 |               4 |            0 |       0        |        0        |     10       |      24 |       12 |          221      |               0       |                 10        |                0        |
+|  57 | only_yellow_zone_agents_with_comm                     | agents_with_comm       | 2     |              0 |               4 |            0 |       0        |        0        |     10       |      24 |       12 |           45      |               0       |                 10        |                0        |
+|  58 | only_yellow_zone_agents_with_comm                     | agents_with_comm       | 3     |              0 |               4 |            0 |       0        |        0        |     10       |      24 |       12 |          108      |               0       |                 10        |                0        |
+|  59 | only_yellow_zone_agents_with_comm                     | agents_with_comm       | avg   |              0 |               4 |            0 |       0        |        0        |     10       |      24 |       12 |          124.667  |               0       |                 10        |                0        |
+|  60 | only_red_zone_agents_with_comm                        | agents_with_comm       | 1     |              0 |               0 |            4 |       0        |        0        |     20       |      24 |       12 |           55      |              20       |                  0        |                0        |
+|  61 | only_red_zone_agents_with_comm                        | agents_with_comm       | 2     |              0 |               0 |            4 |       0        |        0        |     20       |      24 |       12 |          117      |              20       |                  0        |                0        |
+|  62 | only_red_zone_agents_with_comm                        | agents_with_comm       | 3     |              0 |               0 |            4 |       0        |        0        |     20       |      24 |       12 |           76      |              20       |                  0        |                0        |
+|  63 | only_red_zone_agents_with_comm                        | agents_with_comm       | avg   |              0 |               0 |            4 |       0        |        0        |     20       |      24 |       12 |           82.6667 |              20       |                  0        |                0        |
+|  64 | unbalanced_agents_low_red_agents_with_comm            | agents_with_comm       | 1     |              3 |               3 |            1 |       0        |        0        |      6       |      24 |       12 |          110      |               6       |                  0        |                0        |
+|  65 | unbalanced_agents_low_red_agents_with_comm            | agents_with_comm       | 2     |              3 |               3 |            1 |       0        |        0        |      6       |      24 |       12 |          175      |               6       |                  0        |                0        |
+|  66 | unbalanced_agents_low_red_agents_with_comm            | agents_with_comm       | 3     |              3 |               3 |            1 |       0        |        0        |      6       |      24 |       12 |          302      |               6       |                  0        |                0        |
+|  67 | unbalanced_agents_low_red_agents_with_comm            | agents_with_comm       | avg   |              3 |               3 |            1 |       0        |        0        |      6       |      24 |       12 |          195.667  |               6       |                  0        |                0        |
+|  68 | unbalanced_agents_high_red_agents_with_comm           | agents_with_comm       | 1     |              2 |               2 |            6 |       0        |        0        |      6       |      24 |       12 |          122      |               6       |                  0        |                0        |
+|  69 | unbalanced_agents_high_red_agents_with_comm           | agents_with_comm       | 2     |              2 |               2 |            6 |       0        |        0        |      6       |      24 |       12 |          137      |               6       |                  0        |                0        |
+|  70 | unbalanced_agents_high_red_agents_with_comm           | agents_with_comm       | 3     |              2 |               2 |            6 |       0        |        0        |      6       |      24 |       12 |          131      |               6       |                  0        |                0        |
+|  71 | unbalanced_agents_high_red_agents_with_comm           | agents_with_comm       | avg   |              2 |               2 |            6 |       0        |        0        |      6       |      24 |       12 |          130      |               6       |                  0        |                0        |
+|  72 | high_agents_low_waste_agents_with_comm                | agents_with_comm       | 1     |              5 |               5 |            5 |       0        |        0        |      3       |      24 |       12 |          472      |               3       |                  0        |                1        |
+|  73 | high_agents_low_waste_agents_with_comm                | agents_with_comm       | 2     |              5 |               5 |            5 |       0        |        0        |      3       |      24 |       12 |          471      |               3       |                  0        |                1        |
+|  74 | high_agents_low_waste_agents_with_comm                | agents_with_comm       | 3     |              5 |               5 |            5 |       0        |        0        |      3       |      24 |       12 |          489      |               3       |                  0        |                1        |
+|  75 | high_agents_low_waste_agents_with_comm                | agents_with_comm       | avg   |              5 |               5 |            5 |       0        |        0        |      3       |      24 |       12 |          477.333  |               3       |                  0        |                1        |
+|  76 | low_agents_high_waste_agents_with_comm                | agents_with_comm       | 1     |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          453      |              32       |                  3        |                0        |
+|  77 | low_agents_high_waste_agents_with_comm                | agents_with_comm       | 2     |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          445      |              33       |                  2        |                0        |
+|  78 | low_agents_high_waste_agents_with_comm                | agents_with_comm       | 3     |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          450      |              34       |                  1        |                0        |
+|  79 | low_agents_high_waste_agents_with_comm                | agents_with_comm       | avg   |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          449.333  |              33       |                  2        |                0        |
+|  80 | opposite_balance_agents_with_comm                     | agents_with_comm       | 1     |              5 |               2 |            1 |       0        |        0        |     20       |      24 |       12 |          495      |              20       |                  0        |                1        |
+|  81 | opposite_balance_agents_with_comm                     | agents_with_comm       | 2     |              5 |               2 |            1 |       0        |        0        |     20       |      24 |       12 |          452      |              20       |                  0        |                1        |
+|  82 | opposite_balance_agents_with_comm                     | agents_with_comm       | 3     |              5 |               2 |            1 |       0        |        0        |     20       |      24 |       12 |          451      |              20       |                  0        |                1        |
+|  83 | opposite_balance_agents_with_comm                     | agents_with_comm       | avg   |              5 |               2 |            1 |       0        |        0        |     20       |      24 |       12 |          466      |              20       |                  0        |                1        |
+|  84 | swap_balance_agents_with_comm                         | agents_with_comm       | 1     |              2 |               5 |            3 |       0        |        0        |     11       |      24 |       12 |          487      |              11       |                  0        |                2        |
+|  85 | swap_balance_agents_with_comm                         | agents_with_comm       | 2     |              2 |               5 |            3 |       0        |        0        |     11       |      24 |       12 |          496      |              11       |                  0        |                2        |
+|  86 | swap_balance_agents_with_comm                         | agents_with_comm       | 3     |              2 |               5 |            3 |       0        |        0        |     11       |      24 |       12 |          496      |              11       |                  0        |                2        |
+|  87 | swap_balance_agents_with_comm                         | agents_with_comm       | avg   |              2 |               5 |            3 |       0        |        0        |     11       |      24 |       12 |          493      |              11       |                  0        |                2        |
+|  88 | edge_case_empty_waste_agents_with_comm                | agents_with_comm       | 1     |              1 |               1 |            1 |       0        |        0        |      0       |      24 |       12 |            0      |               0       |                  0        |                0        |
+|  89 | edge_case_empty_waste_agents_with_comm                | agents_with_comm       | 2     |              1 |               1 |            1 |       0        |        0        |      0       |      24 |       12 |            0      |               0       |                  0        |                0        |
+|  90 | edge_case_empty_waste_agents_with_comm                | agents_with_comm       | 3     |              1 |               1 |            1 |       0        |        0        |      0       |      24 |       12 |            0      |               0       |                  0        |                0        |
+|  91 | edge_case_empty_waste_agents_with_comm                | agents_with_comm       | avg   |              1 |               1 |            1 |       0        |        0        |      0       |      24 |       12 |            0      |               0       |                  0        |                0        |
+|  92 | edge_case_zero_red_agents_agents_with_comm            | agents_with_comm       | 1     |              1 |               1 |            0 |       0        |        0        |     14       |      24 |       12 |          215      |               0       |                 14        |                0        |
+|  93 | edge_case_zero_red_agents_agents_with_comm            | agents_with_comm       | 2     |              1 |               1 |            0 |       0        |        0        |     14       |      24 |       12 |          290      |               0       |                 14        |                0        |
+|  94 | edge_case_zero_red_agents_agents_with_comm            | agents_with_comm       | 3     |              1 |               1 |            0 |       0        |        0        |     14       |      24 |       12 |          203      |               0       |                 14        |                0        |
+|  95 | edge_case_zero_red_agents_agents_with_comm            | agents_with_comm       | avg   |              1 |               1 |            0 |       0        |        0        |     14       |      24 |       12 |          236      |               0       |                 14        |                0        |
+|  96 | edge_case_zero_green_agents_agents_with_comm          | agents_with_comm       | 1     |              0 |               1 |            1 |      12        |        0        |      4       |      24 |       12 |          106      |               4       |                 12        |                0        |
+|  97 | edge_case_zero_green_agents_agents_with_comm          | agents_with_comm       | 2     |              0 |               1 |            1 |      12        |        0        |      4       |      24 |       12 |           91      |               4       |                 12        |                0        |
+|  98 | edge_case_zero_green_agents_agents_with_comm          | agents_with_comm       | 3     |              0 |               1 |            1 |      12        |        0        |      4       |      24 |       12 |          146      |               4       |                 12        |                0        |
+|  99 | edge_case_zero_green_agents_agents_with_comm          | agents_with_comm       | avg   |              0 |               1 |            1 |      12        |        0        |      4       |      24 |       12 |          114.333  |               4       |                 12        |                0        |
+| 100 | conflicting_agents_vs_wastes_agents_with_comm         | agents_with_comm       | 1     |              5 |               1 |            2 |       0        |        0        |     13       |      24 |       12 |          460      |              13       |                  0        |                1        |
+| 101 | conflicting_agents_vs_wastes_agents_with_comm         | agents_with_comm       | 2     |              5 |               1 |            2 |       0        |        0        |     13       |      24 |       12 |          473      |              13       |                  0        |                1        |
+| 102 | conflicting_agents_vs_wastes_agents_with_comm         | agents_with_comm       | 3     |              5 |               1 |            2 |       0        |        0        |     13       |      24 |       12 |          470      |              13       |                  0        |                1        |
+| 103 | conflicting_agents_vs_wastes_agents_with_comm         | agents_with_comm       | avg   |              5 |               1 |            2 |       0        |        0        |     13       |      24 |       12 |          467.667  |              13       |                  0        |                1        |
+| 104 | even_waste_unbalanced_agents_agents_with_comm         | agents_with_comm       | 1     |              1 |               4 |            2 |       0        |        1        |     17       |      24 |       12 |          495      |              17       |                  1        |                0        |
+| 105 | even_waste_unbalanced_agents_agents_with_comm         | agents_with_comm       | 2     |              1 |               4 |            2 |       0        |        0        |     17       |      24 |       12 |          455      |              17       |                  0        |                1        |
+| 106 | even_waste_unbalanced_agents_agents_with_comm         | agents_with_comm       | 3     |              1 |               4 |            2 |       0        |        0        |     17       |      24 |       12 |          491      |              17       |                  0        |                1        |
+| 107 | even_waste_unbalanced_agents_agents_with_comm         | agents_with_comm       | avg   |              1 |               4 |            2 |       0        |        0.333333 |     17       |      24 |       12 |          480.333  |              17       |                  0.333333 |                0.666667 |
+| 108 | baseline_agents_random_walk                           | agents_random_walk     | 1     |              1 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          156      |               6       |                  0        |                0        |
+| 109 | baseline_agents_random_walk                           | agents_random_walk     | 2     |              1 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          158      |               6       |                  0        |                0        |
+| 110 | baseline_agents_random_walk                           | agents_random_walk     | 3     |              1 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          130      |               6       |                  0        |                0        |
+| 111 | baseline_agents_random_walk                           | agents_random_walk     | avg   |              1 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          148      |               6       |                  0        |                0        |
+| 112 | waste_load_low_agents_random_walk                     | agents_random_walk     | 1     |              1 |               1 |            1 |       1        |        1        |      8       |      24 |       12 |          147      |               8       |                  2        |                0        |
+| 113 | waste_load_low_agents_random_walk                     | agents_random_walk     | 2     |              1 |               1 |            1 |       1        |        1        |      8       |      24 |       12 |          205      |               8       |                  2        |                0        |
+| 114 | waste_load_low_agents_random_walk                     | agents_random_walk     | 3     |              1 |               1 |            1 |       1        |        1        |      8       |      24 |       12 |          235      |               8       |                  2        |                0        |
+| 115 | waste_load_low_agents_random_walk                     | agents_random_walk     | avg   |              1 |               1 |            1 |       1        |        1        |      8       |      24 |       12 |          195.667  |               8       |                  2        |                0        |
+| 116 | waste_load_medium_agents_random_walk                  | agents_random_walk     | 1     |              1 |               1 |            1 |       0        |        1        |     17       |      24 |       12 |          313      |              16       |                  2        |                0        |
+| 117 | waste_load_medium_agents_random_walk                  | agents_random_walk     | 2     |              1 |               1 |            1 |       0        |        1        |     17       |      24 |       12 |          248      |              17       |                  1        |                0        |
+| 118 | waste_load_medium_agents_random_walk                  | agents_random_walk     | 3     |              1 |               1 |            1 |       0        |        1        |     17       |      24 |       12 |          247      |              17       |                  1        |                0        |
+| 119 | waste_load_medium_agents_random_walk                  | agents_random_walk     | avg   |              1 |               1 |            1 |       0        |        1        |     17       |      24 |       12 |          269.333  |              16.6667  |                  1.33333  |                0        |
+| 120 | waste_load_high_agents_random_walk                    | agents_random_walk     | 1     |              1 |               1 |            1 |       0        |        0        |     34       |      24 |       12 |          492      |              33       |                  1        |                1        |
+| 121 | waste_load_high_agents_random_walk                    | agents_random_walk     | 2     |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          430      |              30       |                  5        |                0        |
+| 122 | waste_load_high_agents_random_walk                    | agents_random_walk     | 3     |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          445      |              34       |                  1        |                0        |
+| 123 | waste_load_high_agents_random_walk                    | agents_random_walk     | avg   |              1 |               1 |            1 |       0        |        0        |     34.6667  |      24 |       12 |          455.667  |              32.3333  |                  2.33333  |                0.333333 |
+| 124 | high_green_agents_agents_random_walk                  | agents_random_walk     | 1     |              6 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          260      |               6       |                  0        |                0        |
+| 125 | high_green_agents_agents_random_walk                  | agents_random_walk     | 2     |              6 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          140      |               6       |                  0        |                0        |
+| 126 | high_green_agents_agents_random_walk                  | agents_random_walk     | 3     |              6 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          200      |               6       |                  0        |                0        |
+| 127 | high_green_agents_agents_random_walk                  | agents_random_walk     | avg   |              6 |               1 |            1 |       0        |        0        |      6       |      24 |       12 |          200      |               6       |                  0        |                0        |
+| 128 | high_yellow_agents_agents_random_walk                 | agents_random_walk     | 1     |              1 |               6 |            1 |       0        |        0        |      6       |      24 |       12 |          382      |               6       |                  0        |                0        |
+| 129 | high_yellow_agents_agents_random_walk                 | agents_random_walk     | 2     |              1 |               6 |            1 |       0        |        0        |      6       |      24 |       12 |          306      |               6       |                  0        |                0        |
+| 130 | high_yellow_agents_agents_random_walk                 | agents_random_walk     | 3     |              1 |               6 |            1 |       0        |        0        |      6       |      24 |       12 |          223      |               6       |                  0        |                0        |
+| 131 | high_yellow_agents_agents_random_walk                 | agents_random_walk     | avg   |              1 |               6 |            1 |       0        |        0        |      6       |      24 |       12 |          303.667  |               6       |                  0        |                0        |
+| 132 | high_red_agents_agents_random_walk                    | agents_random_walk     | 1     |              1 |               1 |            6 |       0        |        0        |      6       |      24 |       12 |          150      |               6       |                  0        |                0        |
+| 133 | high_red_agents_agents_random_walk                    | agents_random_walk     | 2     |              1 |               1 |            6 |       0        |        0        |      6       |      24 |       12 |          145      |               6       |                  0        |                0        |
+| 134 | high_red_agents_agents_random_walk                    | agents_random_walk     | 3     |              1 |               1 |            6 |       0        |        0        |      6       |      24 |       12 |          156      |               6       |                  0        |                0        |
+| 135 | high_red_agents_agents_random_walk                    | agents_random_walk     | avg   |              1 |               1 |            6 |       0        |        0        |      6       |      24 |       12 |          150.333  |               6       |                  0        |                0        |
+| 136 | balanced_agents_medium_agents_random_walk             | agents_random_walk     | 1     |              3 |               3 |            3 |       0        |        0        |      6       |      24 |       12 |          174      |               6       |                  0        |                0        |
+| 137 | balanced_agents_medium_agents_random_walk             | agents_random_walk     | 2     |              3 |               3 |            3 |       0        |        0        |      6       |      24 |       12 |          130      |               6       |                  0        |                0        |
+| 138 | balanced_agents_medium_agents_random_walk             | agents_random_walk     | 3     |              3 |               3 |            3 |       0        |        0        |      6       |      24 |       12 |          219      |               6       |                  0        |                0        |
+| 139 | balanced_agents_medium_agents_random_walk             | agents_random_walk     | avg   |              3 |               3 |            3 |       0        |        0        |      6       |      24 |       12 |          174.333  |               6       |                  0        |                0        |
+| 140 | balanced_agents_high_agents_random_walk               | agents_random_walk     | 1     |              5 |               5 |            5 |       0        |        0        |      6       |      24 |       12 |          425      |               6       |                  0        |                0        |
+| 141 | balanced_agents_high_agents_random_walk               | agents_random_walk     | 2     |              5 |               5 |            5 |       0        |        0        |      6       |      24 |       12 |          374      |               6       |                  0        |                0        |
+| 142 | balanced_agents_high_agents_random_walk               | agents_random_walk     | 3     |              5 |               5 |            5 |       0        |        0        |      6       |      24 |       12 |          186      |               6       |                  0        |                0        |
+| 143 | balanced_agents_high_agents_random_walk               | agents_random_walk     | avg   |              5 |               5 |            5 |       0        |        0        |      6       |      24 |       12 |          328.333  |               6       |                  0        |                0        |
+| 144 | imbalanced_wastes_g_dominant_agents_random_walk       | agents_random_walk     | 1     |              1 |               1 |            1 |       0        |        1        |      9       |      24 |       12 |          249      |               9       |                  1        |                0        |
+| 145 | imbalanced_wastes_g_dominant_agents_random_walk       | agents_random_walk     | 2     |              1 |               1 |            1 |       0        |        1        |      9       |      24 |       12 |          229      |               9       |                  1        |                0        |
+| 146 | imbalanced_wastes_g_dominant_agents_random_walk       | agents_random_walk     | 3     |              1 |               1 |            1 |       0        |        1        |      9       |      24 |       12 |          347      |               9       |                  1        |                0        |
+| 147 | imbalanced_wastes_g_dominant_agents_random_walk       | agents_random_walk     | avg   |              1 |               1 |            1 |       0        |        1        |      9       |      24 |       12 |          275      |               9       |                  1        |                0        |
+| 148 | imbalanced_wastes_r_dominant_agents_random_walk       | agents_random_walk     | 1     |              1 |               1 |            1 |       0        |        0        |     23       |      24 |       12 |          357      |              23       |                  0        |                0        |
+| 149 | imbalanced_wastes_r_dominant_agents_random_walk       | agents_random_walk     | 2     |              1 |               1 |            1 |       0        |        0        |     23       |      24 |       12 |          296      |              23       |                  0        |                0        |
+| 150 | imbalanced_wastes_r_dominant_agents_random_walk       | agents_random_walk     | 3     |              1 |               1 |            1 |       0        |        0        |     23       |      24 |       12 |          208      |              20       |                  3        |                0        |
+| 151 | imbalanced_wastes_r_dominant_agents_random_walk       | agents_random_walk     | avg   |              1 |               1 |            1 |       0        |        0        |     23       |      24 |       12 |          287      |              22       |                  1        |                0        |
+| 152 | more_green_agents_less_green_waste_agents_random_walk | agents_random_walk     | 1     |              6 |               1 |            1 |       0        |        0        |      5       |      24 |       12 |          269      |               5       |                  0        |                0        |
+| 153 | more_green_agents_less_green_waste_agents_random_walk | agents_random_walk     | 2     |              6 |               1 |            1 |       0        |        0        |      5       |      24 |       12 |          151      |               5       |                  0        |                0        |
+| 154 | more_green_agents_less_green_waste_agents_random_walk | agents_random_walk     | 3     |              6 |               1 |            1 |       0        |        0        |      5       |      24 |       12 |          182      |               5       |                  0        |                0        |
+| 155 | more_green_agents_less_green_waste_agents_random_walk | agents_random_walk     | avg   |              6 |               1 |            1 |       0        |        0        |      5       |      24 |       12 |          200.667  |               5       |                  0        |                0        |
+| 156 | fewer_agents_more_waste_agents_random_walk            | agents_random_walk     | 1     |              1 |               1 |            1 |       1        |        0        |     26       |      24 |       12 |          448      |              26       |                  1        |                0        |
+| 157 | fewer_agents_more_waste_agents_random_walk            | agents_random_walk     | 2     |              1 |               1 |            1 |       1        |        0        |     26       |      24 |       12 |          345      |              26       |                  1        |                0        |
+| 158 | fewer_agents_more_waste_agents_random_walk            | agents_random_walk     | 3     |              1 |               1 |            1 |       1        |        0        |     26       |      24 |       12 |          396      |              25       |                  2        |                0        |
+| 159 | fewer_agents_more_waste_agents_random_walk            | agents_random_walk     | avg   |              1 |               1 |            1 |       1        |        0        |     26       |      24 |       12 |          396.333  |              25.6667  |                  1.33333  |                0        |
+| 160 | only_green_zone_agents_random_walk                    | agents_random_walk     | 1     |              4 |               0 |            0 |       0        |       10        |      0       |      24 |       12 |          105      |               0       |                 10        |                0        |
+| 161 | only_green_zone_agents_random_walk                    | agents_random_walk     | 2     |              4 |               0 |            0 |       0        |       10        |      0       |      24 |       12 |          167      |               0       |                 10        |                0        |
+| 162 | only_green_zone_agents_random_walk                    | agents_random_walk     | 3     |              4 |               0 |            0 |       0        |       10        |      0       |      24 |       12 |           78      |               0       |                 10        |                0        |
+| 163 | only_green_zone_agents_random_walk                    | agents_random_walk     | avg   |              4 |               0 |            0 |       0        |       10        |      0       |      24 |       12 |          116.667  |               0       |                 10        |                0        |
+| 164 | only_yellow_zone_agents_random_walk                   | agents_random_walk     | 1     |              0 |               4 |            0 |       0        |        0        |     10       |      24 |       12 |          120      |               0       |                 10        |                0        |
+| 165 | only_yellow_zone_agents_random_walk                   | agents_random_walk     | 2     |              0 |               4 |            0 |       0        |        0        |     10       |      24 |       12 |          458      |               0       |                 10        |                0        |
+| 166 | only_yellow_zone_agents_random_walk                   | agents_random_walk     | 3     |              0 |               4 |            0 |       0        |        0        |     10       |      24 |       12 |          363      |               0       |                 10        |                0        |
+| 167 | only_yellow_zone_agents_random_walk                   | agents_random_walk     | avg   |              0 |               4 |            0 |       0        |        0        |     10       |      24 |       12 |          313.667  |               0       |                 10        |                0        |
+| 168 | only_red_zone_agents_random_walk                      | agents_random_walk     | 1     |              0 |               0 |            4 |       0        |        0        |     20       |      24 |       12 |           50      |              20       |                  0        |                0        |
+| 169 | only_red_zone_agents_random_walk                      | agents_random_walk     | 2     |              0 |               0 |            4 |       0        |        0        |     20       |      24 |       12 |          160      |              20       |                  0        |                0        |
+| 170 | only_red_zone_agents_random_walk                      | agents_random_walk     | 3     |              0 |               0 |            4 |       0        |        0        |     20       |      24 |       12 |           88      |              20       |                  0        |                0        |
+| 171 | only_red_zone_agents_random_walk                      | agents_random_walk     | avg   |              0 |               0 |            4 |       0        |        0        |     20       |      24 |       12 |           99.3333 |              20       |                  0        |                0        |
+| 172 | unbalanced_agents_low_red_agents_random_walk          | agents_random_walk     | 1     |              3 |               3 |            1 |       0        |        0        |      6       |      24 |       12 |          318      |               6       |                  0        |                0        |
+| 173 | unbalanced_agents_low_red_agents_random_walk          | agents_random_walk     | 2     |              3 |               3 |            1 |       0        |        0        |      6       |      24 |       12 |          150      |               6       |                  0        |                0        |
+| 174 | unbalanced_agents_low_red_agents_random_walk          | agents_random_walk     | 3     |              3 |               3 |            1 |       0        |        0        |      6       |      24 |       12 |          267      |               6       |                  0        |                0        |
+| 175 | unbalanced_agents_low_red_agents_random_walk          | agents_random_walk     | avg   |              3 |               3 |            1 |       0        |        0        |      6       |      24 |       12 |          245      |               6       |                  0        |                0        |
+| 176 | unbalanced_agents_high_red_agents_random_walk         | agents_random_walk     | 1     |              2 |               2 |            6 |       0        |        0        |      6       |      24 |       12 |           90      |               6       |                  0        |                0        |
+| 177 | unbalanced_agents_high_red_agents_random_walk         | agents_random_walk     | 2     |              2 |               2 |            6 |       0        |        0        |      6       |      24 |       12 |          173      |               6       |                  0        |                0        |
+| 178 | unbalanced_agents_high_red_agents_random_walk         | agents_random_walk     | 3     |              2 |               2 |            6 |       0        |        0        |      6       |      24 |       12 |          470      |               6       |                  0        |                0        |
+| 179 | unbalanced_agents_high_red_agents_random_walk         | agents_random_walk     | avg   |              2 |               2 |            6 |       0        |        0        |      6       |      24 |       12 |          244.333  |               6       |                  0        |                0        |
+| 180 | high_agents_low_waste_agents_random_walk              | agents_random_walk     | 1     |              5 |               5 |            5 |       0        |        0        |      3       |      24 |       12 |          485      |               3       |                  0        |                1        |
+| 181 | high_agents_low_waste_agents_random_walk              | agents_random_walk     | 2     |              5 |               5 |            5 |       0        |        0        |      3       |      24 |       12 |          454      |               3       |                  0        |                1        |
+| 182 | high_agents_low_waste_agents_random_walk              | agents_random_walk     | 3     |              5 |               5 |            5 |       0        |        0        |      3       |      24 |       12 |          476      |               3       |                  0        |                1        |
+| 183 | high_agents_low_waste_agents_random_walk              | agents_random_walk     | avg   |              5 |               5 |            5 |       0        |        0        |      3       |      24 |       12 |          471.667  |               3       |                  0        |                1        |
+| 184 | low_agents_high_waste_agents_random_walk              | agents_random_walk     | 1     |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          482      |              35       |                  0        |                0        |
+| 185 | low_agents_high_waste_agents_random_walk              | agents_random_walk     | 2     |              1 |               1 |            1 |       0        |        0        |     35       |      24 |       12 |          480      |              35       |                  0        |                0        |
+| 186 | low_agents_high_waste_agents_random_walk              | agents_random_walk     | 3     |              1 |               1 |            1 |       0        |        0        |     34       |      24 |       12 |          490      |              34       |                  0        |                1        |
+| 187 | low_agents_high_waste_agents_random_walk              | agents_random_walk     | avg   |              1 |               1 |            1 |       0        |        0        |     34.6667  |      24 |       12 |          484      |              34.6667  |                  0        |                0.333333 |
+| 188 | opposite_balance_agents_random_walk                   | agents_random_walk     | 1     |              5 |               2 |            1 |       0        |        0        |     20       |      24 |       12 |          497      |              20       |                  0        |                1        |
+| 189 | opposite_balance_agents_random_walk                   | agents_random_walk     | 2     |              5 |               2 |            1 |       0        |        0        |     20       |      24 |       12 |          476      |              20       |                  0        |                1        |
+| 190 | opposite_balance_agents_random_walk                   | agents_random_walk     | 3     |              5 |               2 |            1 |       0        |        1        |     20       |      24 |       12 |          493      |              20       |                  1        |                0        |
+| 191 | opposite_balance_agents_random_walk                   | agents_random_walk     | avg   |              5 |               2 |            1 |       0        |        0.333333 |     20       |      24 |       12 |          488.667  |              20       |                  0.333333 |                0.666667 |
+| 192 | swap_balance_agents_random_walk                       | agents_random_walk     | 1     |              2 |               5 |            3 |       0        |        1        |     11       |      24 |       12 |          492      |              11       |                  1        |                1        |
+| 193 | swap_balance_agents_random_walk                       | agents_random_walk     | 2     |              2 |               5 |            3 |       1        |        0        |     11       |      24 |       12 |          451      |              11       |                  1        |                1        |
+| 194 | swap_balance_agents_random_walk                       | agents_random_walk     | 3     |              2 |               5 |            3 |       0        |        0        |     11       |      24 |       12 |          478      |              11       |                  0        |                2        |
+| 195 | swap_balance_agents_random_walk                       | agents_random_walk     | avg   |              2 |               5 |            3 |       0.333333 |        0.333333 |     11       |      24 |       12 |          473.667  |              11       |                  0.666667 |                1.33333  |
+| 196 | edge_case_empty_waste_agents_random_walk              | agents_random_walk     | 1     |              1 |               1 |            1 |       0        |        0        |      0       |      24 |       12 |            0      |               0       |                  0        |                0        |
+| 197 | edge_case_empty_waste_agents_random_walk              | agents_random_walk     | 2     |              1 |               1 |            1 |       0        |        0        |      0       |      24 |       12 |            0      |               0       |                  0        |                0        |
+| 198 | edge_case_empty_waste_agents_random_walk              | agents_random_walk     | 3     |              1 |               1 |            1 |       0        |        0        |      0       |      24 |       12 |            0      |               0       |                  0        |                0        |
+| 199 | edge_case_empty_waste_agents_random_walk              | agents_random_walk     | avg   |              1 |               1 |            1 |       0        |        0        |      0       |      24 |       12 |            0      |               0       |                  0        |                0        |
+| 200 | edge_case_zero_red_agents_agents_random_walk          | agents_random_walk     | 1     |              1 |               1 |            0 |       0        |        0        |     14       |      24 |       12 |          399      |               0       |                 14        |                0        |
+| 201 | edge_case_zero_red_agents_agents_random_walk          | agents_random_walk     | 2     |              1 |               1 |            0 |       0        |        0        |     14       |      24 |       12 |          210      |               0       |                 14        |                0        |
+| 202 | edge_case_zero_red_agents_agents_random_walk          | agents_random_walk     | 3     |              1 |               1 |            0 |       0        |        0        |     14       |      24 |       12 |          251      |               0       |                 14        |                0        |
+| 203 | edge_case_zero_red_agents_agents_random_walk          | agents_random_walk     | avg   |              1 |               1 |            0 |       0        |        0        |     14       |      24 |       12 |          286.667  |               0       |                 14        |                0        |
+| 204 | edge_case_zero_green_agents_agents_random_walk        | agents_random_walk     | 1     |              0 |               1 |            1 |      12        |        0        |      4       |      24 |       12 |           86      |               4       |                 12        |                0        |
+| 205 | edge_case_zero_green_agents_agents_random_walk        | agents_random_walk     | 2     |              0 |               1 |            1 |      12        |        0        |      4       |      24 |       12 |          226      |               4       |                 12        |                0        |
+| 206 | edge_case_zero_green_agents_agents_random_walk        | agents_random_walk     | 3     |              0 |               1 |            1 |      12        |        0        |      4       |      24 |       12 |           81      |               4       |                 12        |                0        |
+| 207 | edge_case_zero_green_agents_agents_random_walk        | agents_random_walk     | avg   |              0 |               1 |            1 |      12        |        0        |      4       |      24 |       12 |          131      |               4       |                 12        |                0        |
+| 208 | conflicting_agents_vs_wastes_agents_random_walk       | agents_random_walk     | 1     |              5 |               1 |            2 |       0        |        0        |     13       |      24 |       12 |          467      |              13       |                  0        |                1        |
+| 209 | conflicting_agents_vs_wastes_agents_random_walk       | agents_random_walk     | 2     |              5 |               1 |            2 |       0        |        0        |     13       |      24 |       12 |          499      |              13       |                  0        |                1        |
+| 210 | conflicting_agents_vs_wastes_agents_random_walk       | agents_random_walk     | 3     |              5 |               1 |            2 |       0        |        0        |     13       |      24 |       12 |          452      |              13       |                  0        |                1        |
+| 211 | conflicting_agents_vs_wastes_agents_random_walk       | agents_random_walk     | avg   |              5 |               1 |            2 |       0        |        0        |     13       |      24 |       12 |          472.667  |              13       |                  0        |                1        |
+| 212 | even_waste_unbalanced_agents_agents_random_walk       | agents_random_walk     | 1     |              1 |               4 |            2 |       0        |        0        |     17       |      24 |       12 |          473      |              17       |                  0        |                1        |
+| 213 | even_waste_unbalanced_agents_agents_random_walk       | agents_random_walk     | 2     |              1 |               4 |            2 |       0        |        1        |     17       |      24 |       12 |          498      |              17       |                  1        |                0        |
+| 214 | even_waste_unbalanced_agents_agents_random_walk       | agents_random_walk     | 3     |              1 |               4 |            2 |       0        |        1        |     17       |      24 |       12 |          493      |              17       |                  1        |                0        |
+| 215 | even_waste_unbalanced_agents_agents_random_walk       | agents_random_walk     | avg   |              1 |               4 |            2 |       0        |        0.666667 |     17       |      24 |       12 |          488      |              17       |                  0.666667 |                0.333333 |
 
-- **Idle Time Percentage:**  
-  Formula:  
-  $$
-  \text{Idle Time Percentage} = \frac{\text{Idle Steps}}{\text{Total Steps}}
-  $$  
-  Pseudo-code:
-  
-```python
-  idle_percentage = idle_steps / total_steps
-  ```
-
-These metrics can be tracked over time to optimize the system's parameters and evaluate different strategies.
+![Bar plot](results/avg_stationary_time_grouped_barplot.png)

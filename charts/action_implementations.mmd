@@ -1,0 +1,22 @@
+
+flowchart TD
+    Actions["Action Implementations"] --> Move_Randomly
+    Actions --> Move_East
+    Actions --> Step_Towards
+    Actions --> Pick_Waste
+    Actions --> Transform_Waste
+    Actions --> Drop_Waste
+    
+    Move_Randomly["move_randomly<br>- Choose least visited neighbor<br>- Update visit count<br>- Reset can_pick flag"]
+    
+    Move_East["move_east<br>- Move to eastern neighbor<br>- Update direction flags<br>- Update visit count"]
+    
+    Step_Towards["step_towards_target<br>- Prioritize x alignment<br>- Calculate Manhattan distance<br>- Select optimal neighbor"]
+    
+    Pick_Waste["pick_waste<br>- Check compatibility<br>- Update inventory<br>- Broadcast removal<br>- Update target status"]
+    
+    Transform_Waste["transform_waste<br>- Combine 2 wastes<br>- Create higher-level waste<br>- Set move_east flag"]
+    
+    Drop_Waste["drop_waste<br>- Place waste on grid<br>- Reset carry timeout<br>- Broadcast new waste<br>- Reset movement flags"]
+
+
