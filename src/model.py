@@ -21,7 +21,7 @@ class Environment(Model):
         red_wastes=2,
         width=9,
         height=9,
-        seed=42,
+        seed=None,
     ):
         super().__init__(seed=seed)
 
