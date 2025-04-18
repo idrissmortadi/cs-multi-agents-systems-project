@@ -373,11 +373,11 @@ if __name__ == "__main__":
     # Sort for consistent plotting order
     avg_df = avg_df.sort_values(by=["variation", "agent_implementation"])
 
-    plt.figure(figsize=(12, 7))  # Adjust figure size as needed
+    plt.figure(figsize=(12, 2 * len(avg_df["variation"].unique())))
     ax = sns.barplot(
         data=avg_df,
-        x="variation",
-        y="stationary_step",
+        y="variation",
+        x="stationary_step",
         hue="agent_implementation",
         palette="viridis",
         hue_order=[
